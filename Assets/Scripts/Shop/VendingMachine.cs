@@ -23,10 +23,14 @@ namespace BobsPetroleum.Shop
         public GameObject vendingUIPrefab;
 
         [Header("Audio")]
+        [Tooltip("Use AudioManager for sounds")]
+        public bool useAudioManager = true;
+
         public AudioClip selectSound;
         public AudioClip purchaseSound;
         public AudioClip dispenseSound;
         public AudioClip errorSound;
+        public AudioClip machineHumSound;
 
         [Header("Dispense Point")]
         [Tooltip("Where items are dispensed")]
@@ -125,20 +129,14 @@ namespace BobsPetroleum.Shop
             // Check if player can afford
             if (!inventory.CanAfford(item.price))
             {
-                if (errorSound != null)
-                {
-                    audioSource.PlayOneShot(errorSound);
-                }
+                PlaySound(errorSound);
                 return false;
             }
 
             // Check stock
             if (item.stock == 0)
             {
-                if (errorSound != null)
-                {
-                    audioSource.PlayOneShot(errorSound);
-                }
+                PlaySound(errorSound);
                 return false;
             }
 
@@ -164,10 +162,7 @@ namespace BobsPetroleum.Shop
             });
 
             // Play sounds
-            if (purchaseSound != null)
-            {
-                audioSource.PlayOneShot(purchaseSound);
-            }
+            PlaySound(purchaseSound);
 
             Invoke(nameof(PlayDispenseSound), 0.5f);
 
@@ -184,9 +179,20 @@ namespace BobsPetroleum.Shop
 
         private void PlayDispenseSound()
         {
-            if (dispenseSound != null)
+            PlaySound(dispenseSound);
+        }
+
+        private void PlaySound(AudioClip clip)
+        {
+            if (clip == null) return;
+
+            if (useAudioManager && Core.AudioManager.Instance != null)
             {
-                audioSource.PlayOneShot(dispenseSound);
+                Core.AudioManager.Instance.PlaySFX(clip, transform.position);
+            }
+            else if (audioSource != null)
+            {
+                audioSource.PlayOneShot(clip);
             }
         }
 

@@ -70,6 +70,22 @@ namespace BobsPetroleum.Systems
         [Tooltip("Night start time (0-1)")]
         public float nightStart = 0.8f;
 
+        [Header("Ambient Audio")]
+        [Tooltip("Use AudioManager for ambient sounds")]
+        public bool useAudioManager = true;
+
+        [Tooltip("Day ambient sound (if not using AudioManager)")]
+        public AudioClip dayAmbientClip;
+
+        [Tooltip("Night ambient sound (if not using AudioManager)")]
+        public AudioClip nightAmbientClip;
+
+        [Tooltip("Dawn transition sound")]
+        public AudioClip dawnSound;
+
+        [Tooltip("Dusk transition sound")]
+        public AudioClip duskSound;
+
         [Header("Events")]
         public UnityEvent onDawnStart;
         public UnityEvent onDayStart;
@@ -82,6 +98,7 @@ namespace BobsPetroleum.Systems
 
         private TimeOfDay previousPhase;
         private bool isPaused = false;
+        private AudioSource audioSource;
 
         private void Awake()
         {
@@ -89,12 +106,23 @@ namespace BobsPetroleum.Systems
             {
                 Instance = this;
             }
+
+            audioSource = GetComponent<AudioSource>();
+            if (audioSource == null && !useAudioManager)
+            {
+                audioSource = gameObject.AddComponent<AudioSource>();
+                audioSource.loop = true;
+                audioSource.spatialBlend = 0f; // 2D sound
+            }
         }
 
         private void Start()
         {
             previousPhase = GetTimeOfDay();
             CurrentPhase = previousPhase;
+
+            // Initialize ambient audio based on current phase
+            UpdateAmbientAudio(CurrentPhase);
         }
 
         private void Update()
@@ -185,9 +213,13 @@ namespace BobsPetroleum.Systems
 
         private void OnPhaseChange(TimeOfDay newPhase)
         {
+            // Update ambient audio
+            UpdateAmbientAudio(newPhase);
+
             switch (newPhase)
             {
                 case TimeOfDay.Dawn:
+                    PlayTransitionSound(dawnSound);
                     onDawnStart?.Invoke();
                     break;
                 case TimeOfDay.Day:
@@ -195,12 +227,54 @@ namespace BobsPetroleum.Systems
                     NotifySpawners(true);
                     break;
                 case TimeOfDay.Dusk:
+                    PlayTransitionSound(duskSound);
                     onDuskStart?.Invoke();
                     break;
                 case TimeOfDay.Night:
                     onNightStart?.Invoke();
                     NotifySpawners(false);
                     break;
+            }
+        }
+
+        private void UpdateAmbientAudio(TimeOfDay phase)
+        {
+            bool isDay = phase == TimeOfDay.Day || phase == TimeOfDay.Dawn;
+
+            if (useAudioManager)
+            {
+                if (isDay)
+                {
+                    AudioManager.Instance?.SetDayAmbient();
+                }
+                else
+                {
+                    AudioManager.Instance?.SetNightAmbient();
+                }
+            }
+            else if (audioSource != null)
+            {
+                // Use local audio source
+                AudioClip targetClip = isDay ? dayAmbientClip : nightAmbientClip;
+                if (targetClip != null && audioSource.clip != targetClip)
+                {
+                    audioSource.clip = targetClip;
+                    audioSource.Play();
+                }
+            }
+        }
+
+        private void PlayTransitionSound(AudioClip clip)
+        {
+            if (clip == null) return;
+
+            if (useAudioManager)
+            {
+                AudioManager.Instance?.PlaySFX2D(clip);
+            }
+            else if (audioSource != null)
+            {
+                audioSource.PlayOneShot(clip);
             }
         }
 

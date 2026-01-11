@@ -26,6 +26,9 @@ namespace BobsPetroleum.NPC
         public CustomerState currentState = CustomerState.Wandering;
 
         [Header("Movement")]
+        [Tooltip("Walking speed")]
+        public float walkSpeed = 3f;
+
         [Tooltip("Wander radius from current position")]
         public float wanderRadius = 20f;
 
@@ -34,6 +37,23 @@ namespace BobsPetroleum.NPC
 
         [Tooltip("Minimum distance to destination")]
         public float arrivalDistance = 1f;
+
+        [Header("NavMesh Settings")]
+        [Tooltip("Agent acceleration")]
+        public float acceleration = 8f;
+
+        [Tooltip("Angular speed for turning")]
+        public float angularSpeed = 120f;
+
+        [Tooltip("Stopping distance from destination")]
+        public float stoppingDistance = 0.5f;
+
+        [Tooltip("Obstacle avoidance radius")]
+        public float avoidanceRadius = 0.5f;
+
+        [Tooltip("Obstacle avoidance priority (lower = higher priority)")]
+        [Range(0, 99)]
+        public int avoidancePriority = 50;
 
         [Header("Shopping")]
         [Tooltip("Chance to visit store (0-1)")]
@@ -62,6 +82,32 @@ namespace BobsPetroleum.NPC
         [Header("Animation")]
         public AnimationEventHandler animationHandler;
 
+        [Header("Audio")]
+        [Tooltip("Footstep sounds")]
+        public AudioClip[] footstepSounds;
+
+        [Tooltip("Idle chatter sounds")]
+        public AudioClip[] chatterSounds;
+
+        [Tooltip("Payment/thank you sounds")]
+        public AudioClip[] paymentSounds;
+
+        [Tooltip("Item pickup sound")]
+        public AudioClip pickupSound;
+
+        [Tooltip("Greeting sound when entering store")]
+        public AudioClip greetingSound;
+
+        [Tooltip("Footstep interval")]
+        public float footstepInterval = 0.5f;
+
+        [Range(0f, 1f)]
+        public float footstepVolume = 0.5f;
+
+        [Range(0f, 1f)]
+        [Tooltip("Chance to play idle chatter")]
+        public float chatterChance = 0.1f;
+
         [Header("Events")]
         public UnityEvent onEnterStore;
         public UnityEvent onStartShopping;
@@ -73,6 +119,11 @@ namespace BobsPetroleum.NPC
         // Components
         private NavMeshAgent agent;
         private NPCHealth health;
+        private AudioSource audioSource;
+
+        // Audio state
+        private float footstepTimer = 0f;
+        private float chatterTimer = 0f;
 
         // Shopping data
         private int itemsToBuy = 0;
@@ -85,10 +136,25 @@ namespace BobsPetroleum.NPC
         {
             agent = GetComponent<NavMeshAgent>();
             health = GetComponent<NPCHealth>();
+            audioSource = GetComponent<AudioSource>();
+
+            if (audioSource == null)
+            {
+                audioSource = gameObject.AddComponent<AudioSource>();
+                audioSource.spatialBlend = 1f; // 3D sound
+            }
         }
 
         private void Start()
         {
+            // Apply NavMesh settings
+            agent.speed = walkSpeed;
+            agent.acceleration = acceleration;
+            agent.angularSpeed = angularSpeed;
+            agent.stoppingDistance = stoppingDistance;
+            agent.radius = avoidanceRadius;
+            agent.avoidancePriority = avoidancePriority;
+
             // Start wandering
             SetWandering();
         }
@@ -96,6 +162,10 @@ namespace BobsPetroleum.NPC
         private void Update()
         {
             if (health != null && health.IsDead) return;
+
+            // Handle audio
+            HandleFootsteps();
+            HandleChatter();
 
             switch (currentState)
             {
@@ -121,6 +191,61 @@ namespace BobsPetroleum.NPC
 
             // Update animation based on movement
             UpdateAnimation();
+        }
+
+        private void HandleFootsteps()
+        {
+            if (footstepSounds == null || footstepSounds.Length == 0) return;
+            if (agent.velocity.magnitude < 0.1f) return;
+
+            footstepTimer += Time.deltaTime;
+            if (footstepTimer >= footstepInterval)
+            {
+                footstepTimer = 0f;
+                AudioClip clip = footstepSounds[Random.Range(0, footstepSounds.Length)];
+                if (clip != null)
+                {
+                    audioSource.PlayOneShot(clip, footstepVolume);
+                }
+            }
+        }
+
+        private void HandleChatter()
+        {
+            if (chatterSounds == null || chatterSounds.Length == 0) return;
+            if (currentState != CustomerState.Shopping && currentState != CustomerState.Wandering) return;
+
+            chatterTimer -= Time.deltaTime;
+            if (chatterTimer <= 0f)
+            {
+                chatterTimer = Random.Range(5f, 15f);
+
+                if (Random.value < chatterChance)
+                {
+                    AudioClip clip = chatterSounds[Random.Range(0, chatterSounds.Length)];
+                    if (clip != null)
+                    {
+                        audioSource.PlayOneShot(clip, 0.6f);
+                    }
+                }
+            }
+        }
+
+        private void PlaySound(AudioClip clip, float volume = 1f)
+        {
+            if (clip != null && audioSource != null)
+            {
+                audioSource.PlayOneShot(clip, volume);
+            }
+        }
+
+        private void PlayRandomSound(AudioClip[] clips, float volume = 1f)
+        {
+            if (clips != null && clips.Length > 0)
+            {
+                AudioClip clip = clips[Random.Range(0, clips.Length)];
+                PlaySound(clip, volume);
+            }
         }
 
         private void UpdateAnimation()
@@ -255,6 +380,9 @@ namespace BobsPetroleum.NPC
             totalCost = 0f;
             currentShelfIndex = 0;
 
+            // Play greeting sound
+            PlaySound(greetingSound, 0.8f);
+
             onEnterStore?.Invoke();
             onStartShopping?.Invoke();
 
@@ -280,6 +408,10 @@ namespace BobsPetroleum.NPC
                 if (shelf != null && shelf.shopItem != null)
                 {
                     totalCost += shelf.shopItem.price;
+
+                    // Play pickup sound
+                    PlaySound(pickupSound, 0.7f);
+
                     onPickItem?.Invoke(shelf.shopItem);
                 }
             }
@@ -316,6 +448,10 @@ namespace BobsPetroleum.NPC
             if (register != null)
             {
                 float paid = register.CompleteTransaction();
+
+                // Play payment/thank you sound
+                PlayRandomSound(paymentSounds, 0.8f);
+
                 onPay?.Invoke(paid);
             }
         }

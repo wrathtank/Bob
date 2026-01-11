@@ -19,11 +19,49 @@ namespace BobsPetroleum.Player
         [Tooltip("Running speed")]
         public float runSpeed = 8f;
 
+        [Tooltip("Crouch speed")]
+        public float crouchSpeed = 2.5f;
+
         [Tooltip("Jump force")]
         public float jumpForce = 5f;
 
         [Tooltip("Gravity multiplier")]
         public float gravityMultiplier = 2f;
+
+        [Header("Crouch Settings")]
+        [Tooltip("Enable crouching")]
+        public bool crouchEnabled = true;
+
+        [Tooltip("Crouch key")]
+        public KeyCode crouchKey = KeyCode.LeftControl;
+
+        [Tooltip("Toggle crouch mode (vs hold)")]
+        public bool crouchToggle = false;
+
+        [Tooltip("Standing height")]
+        public float standingHeight = 2f;
+
+        [Tooltip("Crouching height")]
+        public float crouchHeight = 1f;
+
+        [Tooltip("Crouch transition speed")]
+        public float crouchTransitionSpeed = 8f;
+
+        [Header("Stamina Settings")]
+        [Tooltip("Enable stamina system")]
+        public bool staminaEnabled = true;
+
+        [Tooltip("Maximum stamina")]
+        public float maxStamina = 100f;
+
+        [Tooltip("Stamina drain per second while sprinting")]
+        public float staminaDrain = 20f;
+
+        [Tooltip("Stamina recovery per second")]
+        public float staminaRecovery = 15f;
+
+        [Tooltip("Delay before stamina recovers")]
+        public float staminaRecoveryDelay = 1f;
 
         [Header("Mouse Look")]
         [Tooltip("Mouse sensitivity")]
@@ -35,9 +73,25 @@ namespace BobsPetroleum.Player
         [Tooltip("Maximum vertical look angle")]
         public float maxLookAngle = 90f;
 
+        [Header("Head Bob")]
+        [Tooltip("Enable head bob")]
+        public bool headBobEnabled = true;
+
+        [Tooltip("Head bob frequency while walking")]
+        public float walkBobFrequency = 8f;
+
+        [Tooltip("Head bob frequency while running")]
+        public float runBobFrequency = 12f;
+
+        [Tooltip("Head bob amplitude")]
+        public float headBobAmplitude = 0.05f;
+
         [Header("Camera")]
         [Tooltip("First-person camera (child of player)")]
         public Camera playerCamera;
+
+        [Tooltip("Camera holder for head bob")]
+        public Transform cameraHolder;
 
         [Header("Interaction")]
         [Tooltip("Interaction range")]
@@ -71,6 +125,38 @@ namespace BobsPetroleum.Player
         [Tooltip("Ragdoll controller (optional)")]
         public RagdollController ragdollController;
 
+        [Header("Audio - Footsteps")]
+        [Tooltip("Footstep sounds")]
+        public AudioClip[] footstepSounds;
+
+        [Tooltip("Run footstep sounds (optional, uses regular if empty)")]
+        public AudioClip[] runFootstepSounds;
+
+        [Tooltip("Crouch footstep sounds (optional)")]
+        public AudioClip[] crouchFootstepSounds;
+
+        [Tooltip("Jump sound")]
+        public AudioClip jumpSound;
+
+        [Tooltip("Land sound")]
+        public AudioClip landSound;
+
+        [Tooltip("Hard land sound (high velocity)")]
+        public AudioClip hardLandSound;
+
+        [Tooltip("Fart sound")]
+        public AudioClip fartSound;
+
+        [Tooltip("Footstep interval while walking")]
+        public float walkFootstepInterval = 0.5f;
+
+        [Tooltip("Footstep interval while running")]
+        public float runFootstepInterval = 0.35f;
+
+        [Tooltip("Footstep volume")]
+        [Range(0f, 1f)]
+        public float footstepVolume = 0.7f;
+
         [Header("Cigar Effects")]
         [Tooltip("Current speed multiplier from cigars")]
         public float speedMultiplier = 1f;
@@ -87,9 +173,12 @@ namespace BobsPetroleum.Player
         public UnityEvent onLand;
         public UnityEvent onFart;
         public UnityEvent<IInteractable> onInteract;
+        public UnityEvent<float> onStaminaChanged;
+        public UnityEvent onStaminaDepleted;
 
         // Components
         private CharacterController characterController;
+        private AudioSource audioSource;
         private Vector3 velocity;
         private float verticalRotation = 0f;
         private bool isGrounded;
@@ -98,6 +187,28 @@ namespace BobsPetroleum.Player
         private bool isRagdolling = false;
         private bool isInVehicle = false;
 
+        // Crouch state
+        private bool isCrouching = false;
+        private float currentHeight;
+        private float targetHeight;
+
+        // Stamina state
+        private float currentStamina;
+        private float lastSprintTime;
+        private bool canSprint = true;
+
+        // Footstep state
+        private float footstepTimer = 0f;
+        private float lastFootstepTime = 0f;
+
+        // Head bob state
+        private float headBobTimer = 0f;
+        private Vector3 cameraDefaultLocalPos;
+
+        // Fall damage tracking
+        private float fallStartY = 0f;
+        private bool isFalling = false;
+
         // Network sync
         private NetworkVariable<Vector3> networkPosition = new NetworkVariable<Vector3>();
         private NetworkVariable<Quaternion> networkRotation = new NetworkVariable<Quaternion>();
@@ -105,10 +216,32 @@ namespace BobsPetroleum.Player
         private void Awake()
         {
             characterController = GetComponent<CharacterController>();
+            audioSource = GetComponent<AudioSource>();
+
+            if (audioSource == null)
+            {
+                audioSource = gameObject.AddComponent<AudioSource>();
+                audioSource.spatialBlend = 1f; // 3D sound
+            }
 
             if (playerCamera == null)
             {
                 playerCamera = GetComponentInChildren<Camera>();
+            }
+
+            // Initialize states
+            currentHeight = standingHeight;
+            targetHeight = standingHeight;
+            currentStamina = maxStamina;
+
+            // Store default camera position for head bob
+            if (cameraHolder != null)
+            {
+                cameraDefaultLocalPos = cameraHolder.localPosition;
+            }
+            else if (playerCamera != null)
+            {
+                cameraDefaultLocalPos = playerCamera.transform.localPosition;
             }
         }
 
@@ -147,7 +280,11 @@ namespace BobsPetroleum.Player
             if (!IsOwner || isRagdolling || isInVehicle) return;
 
             HandleMouseLook();
+            HandleCrouch();
+            HandleStamina();
             HandleMovement();
+            HandleFootsteps();
+            HandleHeadBob();
             HandleInteraction();
             HandleFartAbility();
         }
@@ -170,14 +307,125 @@ namespace BobsPetroleum.Player
             }
         }
 
+        private void HandleCrouch()
+        {
+            if (!crouchEnabled) return;
+
+            // Handle crouch input
+            if (crouchToggle)
+            {
+                if (Input.GetKeyDown(crouchKey))
+                {
+                    isCrouching = !isCrouching;
+                }
+            }
+            else
+            {
+                isCrouching = Input.GetKey(crouchKey);
+            }
+
+            // Set target height
+            targetHeight = isCrouching ? crouchHeight : standingHeight;
+
+            // Check if can stand up
+            if (!isCrouching && currentHeight < standingHeight)
+            {
+                // Raycast to check for ceiling
+                if (Physics.Raycast(transform.position, Vector3.up, standingHeight - crouchHeight + 0.1f))
+                {
+                    isCrouching = true;
+                    targetHeight = crouchHeight;
+                }
+            }
+
+            // Smoothly transition height
+            if (Mathf.Abs(currentHeight - targetHeight) > 0.01f)
+            {
+                currentHeight = Mathf.Lerp(currentHeight, targetHeight, crouchTransitionSpeed * Time.deltaTime);
+                characterController.height = currentHeight;
+                characterController.center = new Vector3(0, currentHeight / 2f, 0);
+
+                // Adjust camera position
+                if (playerCamera != null)
+                {
+                    Vector3 camPos = playerCamera.transform.localPosition;
+                    camPos.y = currentHeight - 0.2f; // Eye height
+                    playerCamera.transform.localPosition = camPos;
+                }
+            }
+        }
+
+        private void HandleStamina()
+        {
+            if (!staminaEnabled) return;
+
+            bool isSprinting = Input.GetKey(KeyCode.LeftShift) && isGrounded && !isCrouching;
+            bool isMoving = Mathf.Abs(Input.GetAxis("Horizontal")) > 0.1f || Mathf.Abs(Input.GetAxis("Vertical")) > 0.1f;
+
+            if (isSprinting && isMoving && canSprint)
+            {
+                // Drain stamina
+                currentStamina -= staminaDrain * Time.deltaTime;
+                lastSprintTime = Time.time;
+
+                if (currentStamina <= 0)
+                {
+                    currentStamina = 0;
+                    canSprint = false;
+                    onStaminaDepleted?.Invoke();
+                }
+
+                onStaminaChanged?.Invoke(currentStamina / maxStamina);
+            }
+            else
+            {
+                // Recover stamina after delay
+                if (Time.time > lastSprintTime + staminaRecoveryDelay)
+                {
+                    if (currentStamina < maxStamina)
+                    {
+                        currentStamina += staminaRecovery * Time.deltaTime;
+                        currentStamina = Mathf.Min(currentStamina, maxStamina);
+
+                        if (currentStamina >= maxStamina * 0.2f)
+                        {
+                            canSprint = true;
+                        }
+
+                        onStaminaChanged?.Invoke(currentStamina / maxStamina);
+                    }
+                }
+            }
+        }
+
         private void HandleMovement()
         {
             wasGrounded = isGrounded;
             isGrounded = characterController.isGrounded;
 
+            // Track falling
+            if (!isGrounded && velocity.y < 0 && !isFalling)
+            {
+                isFalling = true;
+                fallStartY = transform.position.y;
+            }
+
             // Landing detection
             if (isGrounded && !wasGrounded)
             {
+                float fallDistance = fallStartY - transform.position.y;
+                isFalling = false;
+
+                // Play appropriate landing sound
+                if (fallDistance > 3f && hardLandSound != null)
+                {
+                    audioSource.PlayOneShot(hardLandSound, footstepVolume);
+                }
+                else if (landSound != null)
+                {
+                    audioSource.PlayOneShot(landSound, footstepVolume);
+                }
+
                 onLand?.Invoke();
                 animationHandler?.TriggerAnimation("Land");
             }
@@ -194,8 +442,23 @@ namespace BobsPetroleum.Player
             // Calculate movement direction
             Vector3 move = transform.right * horizontal + transform.forward * vertical;
 
-            // Determine speed
-            float currentSpeed = Input.GetKey(KeyCode.LeftShift) ? runSpeed : walkSpeed;
+            // Determine speed based on crouch and sprint state
+            float currentSpeed;
+            bool wantsSprint = Input.GetKey(KeyCode.LeftShift) && canSprint;
+
+            if (isCrouching)
+            {
+                currentSpeed = crouchSpeed;
+            }
+            else if (wantsSprint && (!staminaEnabled || currentStamina > 0))
+            {
+                currentSpeed = runSpeed;
+            }
+            else
+            {
+                currentSpeed = walkSpeed;
+            }
+
             currentSpeed *= speedMultiplier;
 
             // Apply movement
@@ -204,20 +467,32 @@ namespace BobsPetroleum.Player
             // Animation triggers
             if (move.magnitude > 0.1f)
             {
-                if (Input.GetKey(KeyCode.LeftShift))
+                if (isCrouching)
+                    animationHandler?.SetAnimation("CrouchWalk", true);
+                else if (wantsSprint && (!staminaEnabled || currentStamina > 0))
                     animationHandler?.SetAnimation("Run", true);
                 else
                     animationHandler?.SetAnimation("Walk", true);
             }
             else
             {
-                animationHandler?.SetAnimation("Idle", true);
+                if (isCrouching)
+                    animationHandler?.SetAnimation("CrouchIdle", true);
+                else
+                    animationHandler?.SetAnimation("Idle", true);
             }
 
-            // Jumping
-            if (Input.GetButtonDown("Jump") && isGrounded)
+            // Jumping (can't jump while crouching)
+            if (Input.GetButtonDown("Jump") && isGrounded && !isCrouching)
             {
                 velocity.y = Mathf.Sqrt(jumpForce * jumpMultiplier * -2f * Physics.gravity.y);
+
+                // Play jump sound
+                if (jumpSound != null)
+                {
+                    audioSource.PlayOneShot(jumpSound, footstepVolume);
+                }
+
                 onJump?.Invoke();
                 animationHandler?.TriggerAnimation("Jump");
             }
@@ -225,6 +500,89 @@ namespace BobsPetroleum.Player
             // Apply gravity
             velocity.y += Physics.gravity.y * gravityMultiplier * Time.deltaTime;
             characterController.Move(velocity * Time.deltaTime);
+        }
+
+        private void HandleFootsteps()
+        {
+            if (!isGrounded) return;
+
+            float horizontal = Input.GetAxis("Horizontal");
+            float vertical = Input.GetAxis("Vertical");
+            bool isMoving = Mathf.Abs(horizontal) > 0.1f || Mathf.Abs(vertical) > 0.1f;
+
+            if (!isMoving) return;
+
+            // Determine footstep interval based on movement type
+            float interval;
+            AudioClip[] clips;
+
+            if (isCrouching)
+            {
+                interval = walkFootstepInterval * 1.5f; // Slower crouch steps
+                clips = crouchFootstepSounds != null && crouchFootstepSounds.Length > 0 ? crouchFootstepSounds : footstepSounds;
+            }
+            else if (Input.GetKey(KeyCode.LeftShift) && canSprint)
+            {
+                interval = runFootstepInterval;
+                clips = runFootstepSounds != null && runFootstepSounds.Length > 0 ? runFootstepSounds : footstepSounds;
+            }
+            else
+            {
+                interval = walkFootstepInterval;
+                clips = footstepSounds;
+            }
+
+            footstepTimer += Time.deltaTime;
+
+            if (footstepTimer >= interval)
+            {
+                footstepTimer = 0f;
+                PlayFootstep(clips);
+            }
+        }
+
+        private void PlayFootstep(AudioClip[] clips)
+        {
+            if (clips == null || clips.Length == 0) return;
+
+            AudioClip clip = clips[Random.Range(0, clips.Length)];
+            if (clip != null)
+            {
+                float volume = isCrouching ? footstepVolume * 0.5f : footstepVolume;
+                audioSource.PlayOneShot(clip, volume);
+            }
+        }
+
+        private void HandleHeadBob()
+        {
+            if (!headBobEnabled || !isGrounded) return;
+
+            float horizontal = Input.GetAxis("Horizontal");
+            float vertical = Input.GetAxis("Vertical");
+            bool isMoving = Mathf.Abs(horizontal) > 0.1f || Mathf.Abs(vertical) > 0.1f;
+
+            Transform camTransform = cameraHolder != null ? cameraHolder : playerCamera?.transform;
+            if (camTransform == null) return;
+
+            if (isMoving && !isCrouching)
+            {
+                bool isRunning = Input.GetKey(KeyCode.LeftShift) && canSprint;
+                float frequency = isRunning ? runBobFrequency : walkBobFrequency;
+                float amplitude = isRunning ? headBobAmplitude * 1.5f : headBobAmplitude;
+
+                headBobTimer += Time.deltaTime * frequency;
+
+                float bobY = Mathf.Sin(headBobTimer) * amplitude;
+                float bobX = Mathf.Cos(headBobTimer * 0.5f) * amplitude * 0.5f;
+
+                camTransform.localPosition = cameraDefaultLocalPos + new Vector3(bobX, bobY, 0);
+            }
+            else
+            {
+                // Reset to default position smoothly
+                headBobTimer = 0f;
+                camTransform.localPosition = Vector3.Lerp(camTransform.localPosition, cameraDefaultLocalPos, Time.deltaTime * 5f);
+            }
         }
 
         private void HandleInteraction()
@@ -266,6 +624,12 @@ namespace BobsPetroleum.Player
             lastFartTime = Time.time;
             onFart?.Invoke();
             animationHandler?.TriggerAnimation("Fart");
+
+            // Play fart sound
+            if (fartSound != null)
+            {
+                audioSource.PlayOneShot(fartSound);
+            }
 
             // Calculate launch direction (forward + up)
             Vector3 launchDirection = (transform.forward + Vector3.up * (fartUpwardForce / fartForce)).normalized;
@@ -371,6 +735,26 @@ namespace BobsPetroleum.Player
         /// Check if player is ragdolling.
         /// </summary>
         public bool IsRagdolling => isRagdolling;
+
+        /// <summary>
+        /// Check if player is crouching.
+        /// </summary>
+        public bool IsCrouching => isCrouching;
+
+        /// <summary>
+        /// Get current stamina (0 to maxStamina).
+        /// </summary>
+        public float CurrentStamina => currentStamina;
+
+        /// <summary>
+        /// Get stamina percentage (0-1).
+        /// </summary>
+        public float StaminaPercentage => currentStamina / maxStamina;
+
+        /// <summary>
+        /// Check if player can sprint.
+        /// </summary>
+        public bool CanSprint => canSprint;
     }
 
     /// <summary>

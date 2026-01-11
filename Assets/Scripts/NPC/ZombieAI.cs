@@ -49,6 +49,26 @@ namespace BobsPetroleum.NPC
         [Tooltip("Time between wander destinations")]
         public float wanderInterval = 4f;
 
+        [Header("NavMesh Settings")]
+        [Tooltip("Agent acceleration")]
+        public float acceleration = 8f;
+
+        [Tooltip("Angular speed for turning")]
+        public float angularSpeed = 120f;
+
+        [Tooltip("Stopping distance from destination")]
+        public float stoppingDistance = 0.5f;
+
+        [Tooltip("Obstacle avoidance radius")]
+        public float avoidanceRadius = 0.5f;
+
+        [Tooltip("Obstacle avoidance priority (lower = higher priority)")]
+        [Range(0, 99)]
+        public int avoidancePriority = 50;
+
+        [Tooltip("Auto brake when reaching destination")]
+        public bool autoBraking = true;
+
         [Header("Combat")]
         [Tooltip("Attack range")]
         public float attackRange = 2f;
@@ -65,8 +85,15 @@ namespace BobsPetroleum.NPC
         [Header("Audio")]
         public AudioClip[] groans;
         public AudioClip attackSound;
+        public AudioClip[] footstepSounds;
+        public AudioClip[] hitSounds;
+        public AudioClip deathSound;
         [Range(0f, 1f)]
         public float groanChance = 0.1f;
+        [Tooltip("Footstep interval while walking")]
+        public float footstepInterval = 0.6f;
+        [Range(0f, 1f)]
+        public float footstepVolume = 0.5f;
 
         [Header("Events")]
         public UnityEvent<Transform> onTargetDetected;
@@ -83,6 +110,7 @@ namespace BobsPetroleum.NPC
         private float lastAttackTime = -999f;
         private float stateTimer = 0f;
         private float groanTimer = 0f;
+        private float footstepTimer = 0f;
 
         private void Awake()
         {
@@ -98,7 +126,15 @@ namespace BobsPetroleum.NPC
 
         private void Start()
         {
+            // Apply NavMesh settings
             agent.speed = walkSpeed;
+            agent.acceleration = acceleration;
+            agent.angularSpeed = angularSpeed;
+            agent.stoppingDistance = stoppingDistance;
+            agent.radius = avoidanceRadius;
+            agent.avoidancePriority = avoidancePriority;
+            agent.autoBraking = autoBraking;
+
             SetWandering();
         }
 
@@ -108,6 +144,9 @@ namespace BobsPetroleum.NPC
 
             // Random groan
             HandleGroaning();
+
+            // Footsteps
+            HandleFootsteps();
 
             // State machine
             switch (currentState)
@@ -145,6 +184,54 @@ namespace BobsPetroleum.NPC
                     audioSource.PlayOneShot(groans[Random.Range(0, groans.Length)]);
                 }
             }
+        }
+
+        private void HandleFootsteps()
+        {
+            if (footstepSounds == null || footstepSounds.Length == 0) return;
+            if (agent.velocity.magnitude < 0.1f) return;
+
+            float interval = currentState == ZombieState.Chasing ? footstepInterval * 0.7f : footstepInterval;
+
+            footstepTimer += Time.deltaTime;
+            if (footstepTimer >= interval)
+            {
+                footstepTimer = 0f;
+                AudioClip clip = footstepSounds[Random.Range(0, footstepSounds.Length)];
+                if (clip != null)
+                {
+                    audioSource.PlayOneShot(clip, footstepVolume);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Called when zombie takes damage (hook this to NPCHealth.onDamaged).
+        /// </summary>
+        public void OnTakeDamage(float damage)
+        {
+            if (hitSounds != null && hitSounds.Length > 0)
+            {
+                AudioClip clip = hitSounds[Random.Range(0, hitSounds.Length)];
+                if (clip != null)
+                {
+                    audioSource.PlayOneShot(clip);
+                }
+            }
+            animationHandler?.TriggerAnimation("Hurt");
+        }
+
+        /// <summary>
+        /// Called when zombie dies (hook this to NPCHealth.onDeath).
+        /// </summary>
+        public void OnDeath()
+        {
+            if (deathSound != null)
+            {
+                audioSource.PlayOneShot(deathSound);
+            }
+            animationHandler?.TriggerAnimation("Death");
+            agent.isStopped = true;
         }
 
         private void UpdateAnimation()

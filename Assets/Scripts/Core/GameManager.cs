@@ -79,6 +79,10 @@ namespace BobsPetroleum.Core
             currentDay = 1;
             currentHamburgersFed = 0;
             bobRevived = false;
+
+            // Play game start sound
+            AudioManager.Instance?.PlayGameStart();
+
             onGameStart?.Invoke();
         }
 
@@ -87,6 +91,10 @@ namespace BobsPetroleum.Core
             if (gameEnded) return;
 
             currentDay++;
+
+            // Play day change sound
+            AudioManager.Instance?.PlayDayChange();
+
             onDayChange?.Invoke();
 
             if (currentDay > totalDays)
@@ -100,6 +108,10 @@ namespace BobsPetroleum.Core
             if (gameEnded) return;
 
             currentHamburgersFed++;
+
+            // Play hamburger fed sound
+            AudioManager.Instance?.PlayHamburgerFed();
+
             onHamburgerFed?.Invoke(currentHamburgersFed);
 
             if (currentHamburgersFed >= hamburgersToReviveBob)
@@ -125,6 +137,9 @@ namespace BobsPetroleum.Core
 
         private void Victory()
         {
+            // Play victory sound
+            AudioManager.Instance?.PlayVictory();
+
             onVictory?.Invoke();
 
             if (victoryObject != null)
@@ -137,6 +152,9 @@ namespace BobsPetroleum.Core
 
         private void GameOver()
         {
+            // Play game over sound
+            AudioManager.Instance?.PlayGameOver();
+
             onGameOver?.Invoke();
 
             if (gameOverObject != null)
