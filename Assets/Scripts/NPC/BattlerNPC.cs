@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.AI;
 using UnityEngine.Events;
 using System.Collections.Generic;
 using BobsPetroleum.Player;
@@ -9,13 +10,49 @@ namespace BobsPetroleum.NPC
 {
     /// <summary>
     /// NPC that can engage in Pokemon-style battles with players.
-    /// Assign animal prefabs in the inspector.
+    /// Can be stationary or wander around. Assign animal prefabs in the inspector.
     /// </summary>
     public class BattlerNPC : MonoBehaviour, IInteractable
     {
+        public enum BattlerBehavior
+        {
+            Stationary,
+            Wandering,
+            Patrolling
+        }
+
         [Header("Battler Info")]
         [Tooltip("Battler name")]
         public string battlerName = "Wild Trainer";
+
+        [Header("Behavior")]
+        [Tooltip("How the battler moves")]
+        public BattlerBehavior behavior = BattlerBehavior.Stationary;
+
+        [Tooltip("Walk speed when wandering")]
+        public float walkSpeed = 2f;
+
+        [Tooltip("Wander radius from spawn point")]
+        public float wanderRadius = 15f;
+
+        [Tooltip("Time between wander destinations")]
+        public float wanderInterval = 5f;
+
+        [Tooltip("Patrol points (for Patrolling behavior)")]
+        public List<Transform> patrolPoints = new List<Transform>();
+
+        [Tooltip("Wait time at each patrol point")]
+        public float patrolWaitTime = 3f;
+
+        [Header("NavMesh Settings")]
+        [Tooltip("Agent acceleration")]
+        public float acceleration = 8f;
+
+        [Tooltip("Angular speed for turning")]
+        public float angularSpeed = 120f;
+
+        [Tooltip("Stopping distance")]
+        public float stoppingDistance = 0.5f;
 
         [Tooltip("Dialogue before battle")]
         [TextArea(2, 4)]
@@ -65,8 +102,135 @@ namespace BobsPetroleum.NPC
         public UnityEvent onBattleWin;
         public UnityEvent onBattleLose;
 
+        // Components
+        private NavMeshAgent agent;
+
+        // State
         private bool hasBeenDefeated = false;
         private float lastBattleTime = -999f;
+        private Vector3 spawnPosition;
+        private float stateTimer = 0f;
+        private int currentPatrolIndex = 0;
+        private bool isInBattle = false;
+
+        private void Awake()
+        {
+            agent = GetComponent<NavMeshAgent>();
+            spawnPosition = transform.position;
+        }
+
+        private void Start()
+        {
+            if (agent != null && behavior != BattlerBehavior.Stationary)
+            {
+                agent.speed = walkSpeed;
+                agent.acceleration = acceleration;
+                agent.angularSpeed = angularSpeed;
+                agent.stoppingDistance = stoppingDistance;
+
+                if (behavior == BattlerBehavior.Wandering)
+                {
+                    SetNewWanderDestination();
+                }
+                else if (behavior == BattlerBehavior.Patrolling && patrolPoints.Count > 0)
+                {
+                    agent.SetDestination(patrolPoints[0].position);
+                }
+            }
+        }
+
+        private void Update()
+        {
+            if (isInBattle || behavior == BattlerBehavior.Stationary) return;
+            if (agent == null) return;
+
+            stateTimer -= Time.deltaTime;
+
+            switch (behavior)
+            {
+                case BattlerBehavior.Wandering:
+                    UpdateWandering();
+                    break;
+                case BattlerBehavior.Patrolling:
+                    UpdatePatrolling();
+                    break;
+            }
+
+            // Update animation
+            if (animationHandler != null)
+            {
+                if (agent.velocity.magnitude > 0.1f)
+                {
+                    animationHandler.SetAnimation("Walk", true);
+                }
+                else
+                {
+                    animationHandler.SetAnimation("Idle", true);
+                }
+            }
+        }
+
+        private void UpdateWandering()
+        {
+            if (stateTimer <= 0f || HasReachedDestination())
+            {
+                if (Random.value < 0.3f)
+                {
+                    // Idle for a bit
+                    agent.isStopped = true;
+                    stateTimer = Random.Range(2f, 5f);
+                }
+                else
+                {
+                    SetNewWanderDestination();
+                }
+            }
+        }
+
+        private void UpdatePatrolling()
+        {
+            if (patrolPoints.Count == 0) return;
+
+            if (HasReachedDestination())
+            {
+                if (stateTimer <= 0f)
+                {
+                    // Move to next patrol point
+                    currentPatrolIndex = (currentPatrolIndex + 1) % patrolPoints.Count;
+                    agent.SetDestination(patrolPoints[currentPatrolIndex].position);
+                    stateTimer = patrolWaitTime;
+                }
+                else
+                {
+                    agent.isStopped = true;
+                }
+            }
+            else
+            {
+                agent.isStopped = false;
+            }
+        }
+
+        private void SetNewWanderDestination()
+        {
+            Vector3 randomDirection = Random.insideUnitSphere * wanderRadius;
+            randomDirection += spawnPosition;
+
+            NavMeshHit hit;
+            if (NavMesh.SamplePosition(randomDirection, out hit, wanderRadius, NavMesh.AllAreas))
+            {
+                agent.isStopped = false;
+                agent.SetDestination(hit.position);
+            }
+
+            stateTimer = wanderInterval;
+        }
+
+        private bool HasReachedDestination()
+        {
+            if (agent == null) return true;
+            return !agent.pathPending && agent.remainingDistance <= stoppingDistance;
+        }
 
         public void Interact(PlayerController player)
         {
@@ -106,6 +270,22 @@ namespace BobsPetroleum.NPC
         public void StartBattle(PlayerController player)
         {
             lastBattleTime = Time.time;
+            isInBattle = true;
+
+            // Stop moving
+            if (agent != null)
+            {
+                agent.isStopped = true;
+            }
+
+            // Face player
+            Vector3 lookDir = (player.transform.position - transform.position).normalized;
+            lookDir.y = 0;
+            if (lookDir != Vector3.zero)
+            {
+                transform.rotation = Quaternion.LookRotation(lookDir);
+            }
+
             animationHandler?.TriggerAnimation("BattleReady");
             onBattleStart?.Invoke(player);
 
@@ -169,8 +349,12 @@ namespace BobsPetroleum.NPC
         /// </summary>
         public void OnWin()
         {
+            isInBattle = false;
             animationHandler?.TriggerAnimation("Victory");
             onBattleWin?.Invoke();
+
+            // Resume movement after delay
+            Invoke(nameof(ResumeMovement), 3f);
         }
 
         /// <summary>
@@ -178,6 +362,7 @@ namespace BobsPetroleum.NPC
         /// </summary>
         public void OnLose(PlayerController player)
         {
+            isInBattle = false;
             hasBeenDefeated = true;
             animationHandler?.TriggerAnimation("Defeat");
             onBattleLose?.Invoke();
@@ -191,6 +376,22 @@ namespace BobsPetroleum.NPC
                 foreach (var item in itemRewards)
                 {
                     playerInventory.AddItem(item);
+                }
+            }
+
+            // Resume movement after delay
+            Invoke(nameof(ResumeMovement), 3f);
+        }
+
+        private void ResumeMovement()
+        {
+            if (agent != null && behavior != BattlerBehavior.Stationary)
+            {
+                agent.isStopped = false;
+
+                if (behavior == BattlerBehavior.Wandering)
+                {
+                    SetNewWanderDestination();
                 }
             }
         }

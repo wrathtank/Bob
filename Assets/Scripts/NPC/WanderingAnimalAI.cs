@@ -50,12 +50,48 @@ namespace BobsPetroleum.NPC
         [Tooltip("Wander interval")]
         public float wanderInterval = 3f;
 
+        [Header("NavMesh Settings")]
+        [Tooltip("Agent acceleration")]
+        public float acceleration = 8f;
+
+        [Tooltip("Angular speed for turning")]
+        public float angularSpeed = 180f;
+
+        [Tooltip("Stopping distance")]
+        public float stoppingDistance = 0.3f;
+
+        [Tooltip("Obstacle avoidance radius")]
+        public float avoidanceRadius = 0.3f;
+
         [Header("Detection")]
         [Tooltip("Distance to start fleeing from players")]
         public float fleeDistance = 5f;
 
         [Tooltip("Distance to stop fleeing")]
         public float safeDistance = 15f;
+
+        [Header("Audio")]
+        [Tooltip("Idle/ambient sounds")]
+        public AudioClip[] idleSounds;
+
+        [Tooltip("Flee sounds")]
+        public AudioClip[] fleeSounds;
+
+        [Tooltip("Capture sound")]
+        public AudioClip captureSound;
+
+        [Tooltip("Footstep sounds")]
+        public AudioClip[] footstepSounds;
+
+        [Tooltip("Footstep interval")]
+        public float footstepInterval = 0.4f;
+
+        [Range(0f, 1f)]
+        public float footstepVolume = 0.3f;
+
+        [Tooltip("Chance to play idle sound")]
+        [Range(0f, 1f)]
+        public float idleSoundChance = 0.1f;
 
         [Header("Animation")]
         public AnimationEventHandler animationHandler;
@@ -67,18 +103,34 @@ namespace BobsPetroleum.NPC
 
         // Components
         private NavMeshAgent agent;
+        private AudioSource audioSource;
         private AnimalState currentState = AnimalState.Wandering;
         private float stateTimer = 0f;
         private Transform threatTarget;
+        private float footstepTimer = 0f;
+        private float idleSoundTimer = 0f;
 
         private void Awake()
         {
             agent = GetComponent<NavMeshAgent>();
+            audioSource = GetComponent<AudioSource>();
+
+            if (audioSource == null)
+            {
+                audioSource = gameObject.AddComponent<AudioSource>();
+                audioSource.spatialBlend = 1f;
+            }
         }
 
         private void Start()
         {
+            // Apply NavMesh settings
             agent.speed = walkSpeed;
+            agent.acceleration = acceleration;
+            agent.angularSpeed = angularSpeed;
+            agent.stoppingDistance = stoppingDistance;
+            agent.radius = avoidanceRadius;
+
             SetWandering();
         }
 
@@ -87,6 +139,7 @@ namespace BobsPetroleum.NPC
             if (currentState == AnimalState.Captured) return;
 
             CheckForThreats();
+            HandleAudio();
 
             switch (currentState)
             {
@@ -102,6 +155,45 @@ namespace BobsPetroleum.NPC
             }
 
             UpdateAnimation();
+        }
+
+        private void HandleAudio()
+        {
+            // Footsteps
+            if (agent.velocity.magnitude > 0.1f && footstepSounds != null && footstepSounds.Length > 0)
+            {
+                float interval = currentState == AnimalState.Fleeing ? footstepInterval * 0.6f : footstepInterval;
+
+                footstepTimer += Time.deltaTime;
+                if (footstepTimer >= interval)
+                {
+                    footstepTimer = 0f;
+                    AudioClip clip = footstepSounds[Random.Range(0, footstepSounds.Length)];
+                    if (clip != null)
+                    {
+                        audioSource.PlayOneShot(clip, footstepVolume);
+                    }
+                }
+            }
+
+            // Idle sounds
+            if (currentState == AnimalState.Idle || currentState == AnimalState.Wandering)
+            {
+                idleSoundTimer -= Time.deltaTime;
+                if (idleSoundTimer <= 0f)
+                {
+                    idleSoundTimer = Random.Range(5f, 15f);
+
+                    if (Random.value < idleSoundChance && idleSounds != null && idleSounds.Length > 0)
+                    {
+                        AudioClip clip = idleSounds[Random.Range(0, idleSounds.Length)];
+                        if (clip != null)
+                        {
+                            audioSource.PlayOneShot(clip, 0.5f);
+                        }
+                    }
+                }
+            }
         }
 
         private void UpdateAnimation()
@@ -218,6 +310,17 @@ namespace BobsPetroleum.NPC
             threatTarget = threat;
             agent.isStopped = false;
             agent.speed = fleeSpeed;
+
+            // Play flee sound
+            if (fleeSounds != null && fleeSounds.Length > 0)
+            {
+                AudioClip clip = fleeSounds[Random.Range(0, fleeSounds.Length)];
+                if (clip != null)
+                {
+                    audioSource.PlayOneShot(clip, 0.7f);
+                }
+            }
+
             onStartFleeing?.Invoke();
         }
 
@@ -287,6 +390,13 @@ namespace BobsPetroleum.NPC
         {
             currentState = AnimalState.Captured;
             agent.isStopped = true;
+
+            // Play capture sound
+            if (captureSound != null)
+            {
+                audioSource.PlayOneShot(captureSound);
+            }
+
             onCaptured?.Invoke();
             animationHandler?.TriggerAnimation("Captured");
 
