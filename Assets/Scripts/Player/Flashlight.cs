@@ -228,6 +228,7 @@ namespace BobsPetroleum.Player
         private void UpdateBattery()
         {
             if (!useBattery) return;
+            if (maxBattery <= 0) return; // Prevent divide by zero
 
             // Drain battery
             currentBattery -= drainRate * Time.deltaTime;
@@ -262,7 +263,7 @@ namespace BobsPetroleum.Player
         public void RechargeBattery(float amount)
         {
             currentBattery = Mathf.Min(currentBattery + amount, maxBattery);
-            onBatteryChanged?.Invoke(currentBattery / maxBattery);
+            onBatteryChanged?.Invoke(maxBattery > 0 ? currentBattery / maxBattery : 0f);
         }
 
         /// <summary>
@@ -280,7 +281,7 @@ namespace BobsPetroleum.Player
         public void SetBatteryLevel(float percent)
         {
             currentBattery = maxBattery * Mathf.Clamp01(percent);
-            onBatteryChanged?.Invoke(currentBattery / maxBattery);
+            onBatteryChanged?.Invoke(maxBattery > 0 ? currentBattery / maxBattery : 0f);
         }
 
         #endregion
@@ -295,6 +296,11 @@ namespace BobsPetroleum.Player
             if (flickerOnLowBattery && isLowBattery)
             {
                 flickerTimer += Time.deltaTime * flickerSpeed;
+                // Wrap flicker timer to prevent drift beyond Perlin noise useful range
+                if (flickerTimer > 1000f)
+                {
+                    flickerTimer = 0f;
+                }
                 float flicker = Mathf.PerlinNoise(flickerTimer, 0f) * 2f - 1f;
                 targetIntensity = normalIntensity + flicker * flickerIntensity;
 
@@ -389,7 +395,7 @@ namespace BobsPetroleum.Player
         #region Properties
 
         public bool IsOn => isOn;
-        public float BatteryPercent => currentBattery / maxBattery;
+        public float BatteryPercent => maxBattery > 0 ? currentBattery / maxBattery : 0f;
         public bool IsLowBattery => isLowBattery;
         public bool HasBattery => currentBattery > 0;
 

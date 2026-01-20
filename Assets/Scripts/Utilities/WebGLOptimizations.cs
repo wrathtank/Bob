@@ -365,10 +365,10 @@ namespace BobsPetroleum.Utilities
         /// <summary>
         /// Check if performance is struggling.
         /// </summary>
-        public bool IsPerformanceStrugging()
+        public bool IsPerformanceStruggling()
         {
             // If FPS is consistently low
-            return 1f / Time.deltaTime < 25f;
+            return Time.deltaTime > 0f && 1f / Time.deltaTime < 25f;
         }
 
         /// <summary>
@@ -376,7 +376,7 @@ namespace BobsPetroleum.Utilities
         /// </summary>
         public void AdaptiveQuality()
         {
-            if (IsPerformanceStrugging())
+            if (IsPerformanceStruggling())
             {
                 int currentLevel = QualitySettings.GetQualityLevel();
                 if (currentLevel > 0)
@@ -396,10 +396,14 @@ namespace BobsPetroleum.Utilities
         /// </summary>
         public ObjectPool GetOrCreatePool(string poolId, GameObject prefab, int initialSize = 10)
         {
-            var existingPool = FindObjectOfType<ObjectPool>();
-            if (existingPool != null && existingPool.poolId == poolId)
+            // Search all pools for matching ID
+            ObjectPool[] allPools = FindObjectsOfType<ObjectPool>();
+            foreach (var existingPool in allPools)
             {
-                return existingPool;
+                if (existingPool != null && existingPool.poolId == poolId)
+                {
+                    return existingPool;
+                }
             }
 
             // Create new pool

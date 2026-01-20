@@ -61,6 +61,8 @@ namespace BobsPetroleum.Systems
         private List<Quest> completedQuests = new List<Quest>();
         private AudioSource audioSource;
         private bool tutorialComplete = false;
+        private Player.PlayerController cachedPlayer;
+        private Player.PlayerInventory cachedInventory;
 
         private void Awake()
         {
@@ -374,9 +376,8 @@ namespace BobsPetroleum.Systems
                         task.currentProgress = task.targetAmount;
                         task.isComplete = true;
 
-                        // Give rewards
-                        var player = FindObjectOfType<Player.PlayerController>();
-                        var inventory = player?.GetComponent<Player.PlayerInventory>();
+                        // Give rewards using cached reference
+                        var inventory = GetPlayerInventory();
                         inventory?.AddMoney(task.rewardMoney);
 
                         PlaySound(dailyTaskCompleteSound);
@@ -432,10 +433,23 @@ namespace BobsPetroleum.Systems
 
         #region Rewards
 
+        private Player.PlayerInventory GetPlayerInventory()
+        {
+            // Cache player reference for performance
+            if (cachedPlayer == null)
+            {
+                cachedPlayer = FindObjectOfType<Player.PlayerController>();
+            }
+            if (cachedPlayer != null && cachedInventory == null)
+            {
+                cachedInventory = cachedPlayer.GetComponent<Player.PlayerInventory>();
+            }
+            return cachedInventory;
+        }
+
         private void GiveQuestRewards(Quest quest)
         {
-            var player = FindObjectOfType<Player.PlayerController>();
-            var inventory = player?.GetComponent<Player.PlayerInventory>();
+            var inventory = GetPlayerInventory();
 
             if (inventory != null)
             {
@@ -511,6 +525,21 @@ namespace BobsPetroleum.Systems
                 GameManager.Instance.onDayChange.AddListener(OnDayChanged);
                 GameManager.Instance.onHamburgerFed.AddListener(OnHamburgerFed);
             }
+        }
+
+        private void UnsubscribeFromGameEvents()
+        {
+            // Unsubscribe to prevent memory leaks
+            if (GameManager.Instance != null)
+            {
+                GameManager.Instance.onDayChange.RemoveListener(OnDayChanged);
+                GameManager.Instance.onHamburgerFed.RemoveListener(OnHamburgerFed);
+            }
+        }
+
+        private void OnDestroy()
+        {
+            UnsubscribeFromGameEvents();
         }
 
         private void OnDayChanged()

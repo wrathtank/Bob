@@ -80,6 +80,7 @@ namespace BobsPetroleum.UI
         private Dictionary<Transform, GameObject> activeMarkers = new Dictionary<Transform, GameObject>();
         private RenderTexture minimapRenderTexture;
         private bool isFullMapOpen = false;
+        private GameObject currentWaypointObj;
 
         private void Awake()
         {
@@ -446,12 +447,14 @@ namespace BobsPetroleum.UI
         /// </summary>
         public void SetQuestWaypoint(Vector3 worldPosition)
         {
-            // Create a temporary transform holder
-            GameObject waypointObj = new GameObject("QuestWaypoint");
-            waypointObj.transform.position = worldPosition;
+            // Clean up old waypoint first
+            ClearQuestWaypoint();
 
-            ClearMarkers(MarkerType.Quest);
-            AddMarker(waypointObj.transform, MarkerType.Quest, "Objective");
+            // Create a temporary transform holder
+            currentWaypointObj = new GameObject("QuestWaypoint");
+            currentWaypointObj.transform.position = worldPosition;
+
+            AddMarker(currentWaypointObj.transform, MarkerType.Quest, "Objective");
         }
 
         /// <summary>
@@ -460,6 +463,13 @@ namespace BobsPetroleum.UI
         public void ClearQuestWaypoint()
         {
             ClearMarkers(MarkerType.Quest);
+
+            // Clean up waypoint object
+            if (currentWaypointObj != null)
+            {
+                Destroy(currentWaypointObj);
+                currentWaypointObj = null;
+            }
         }
 
         #endregion
@@ -468,10 +478,27 @@ namespace BobsPetroleum.UI
 
         private void OnDestroy()
         {
+            // Clean up render texture
             if (minimapRenderTexture != null)
             {
                 minimapRenderTexture.Release();
             }
+
+            // Clean up waypoint object
+            if (currentWaypointObj != null)
+            {
+                Destroy(currentWaypointObj);
+            }
+
+            // Clean up markers
+            foreach (var marker in activeMarkers.Values)
+            {
+                if (marker != null)
+                {
+                    Destroy(marker);
+                }
+            }
+            activeMarkers.Clear();
         }
     }
 

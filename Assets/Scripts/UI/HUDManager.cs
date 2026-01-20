@@ -131,6 +131,8 @@ namespace BobsPetroleum.UI
         private float staminaHideTimer;
         private float lastDisplayedMoney;
         private Color staminaBarDefaultColor;
+        private Coroutine fadeVignetteCoroutine;
+        private Coroutine hideMoneyCoroutine;
 
         private void Awake()
         {
@@ -151,6 +153,25 @@ namespace BobsPetroleum.UI
             HideInteractionPrompt();
             if (lowHealthOverlay != null) lowHealthOverlay.gameObject.SetActive(false);
             if (damageVignette != null) damageVignette.color = new Color(1, 0, 0, 0);
+        }
+
+        private void OnDestroy()
+        {
+            // Unsubscribe from events to prevent memory leaks
+            if (playerHealth != null)
+            {
+                playerHealth.onDamaged.RemoveListener(OnPlayerDamaged);
+                playerHealth.onHealed.RemoveListener(OnPlayerHealed);
+            }
+
+            if (player != null)
+            {
+                player.onStaminaChanged.RemoveListener(OnStaminaChanged);
+            }
+
+            // Clean up coroutines
+            if (fadeVignetteCoroutine != null) StopCoroutine(fadeVignetteCoroutine);
+            if (hideMoneyCoroutine != null) StopCoroutine(hideMoneyCoroutine);
         }
 
         private void Update()
@@ -194,6 +215,7 @@ namespace BobsPetroleum.UI
         private void UpdateHealthDisplay()
         {
             if (playerHealth == null) return;
+            if (playerHealth.maxHealth <= 0) return; // Prevent divide by zero
 
             float healthPercent = playerHealth.CurrentHealth / playerHealth.maxHealth;
 
@@ -227,6 +249,7 @@ namespace BobsPetroleum.UI
         private void UpdateLowHealthEffect()
         {
             if (playerHealth == null || lowHealthOverlay == null) return;
+            if (playerHealth.maxHealth <= 0) return; // Prevent divide by zero
 
             float healthPercent = playerHealth.CurrentHealth / playerHealth.maxHealth;
 
@@ -245,6 +268,10 @@ namespace BobsPetroleum.UI
             }
         }
 
+        [Header("Audio")]
+        [Tooltip("Sound when player takes damage")]
+        public AudioClip hurtSound;
+
         private void OnPlayerDamaged(float damage)
         {
             // Flash health bar
@@ -257,7 +284,10 @@ namespace BobsPetroleum.UI
             ShowDamageVignette();
 
             // Play hurt sound through AudioManager
-            AudioManager.Instance?.PlaySFX2D(null); // Would use a hurt sound
+            if (hurtSound != null)
+            {
+                AudioManager.Instance?.PlaySFX2D(hurtSound);
+            }
         }
 
         private void OnPlayerHealed(float amount)
@@ -269,14 +299,19 @@ namespace BobsPetroleum.UI
         {
             if (damageVignette != null)
             {
-                StopCoroutine(nameof(FadeDamageVignette));
+                if (fadeVignetteCoroutine != null)
+                {
+                    StopCoroutine(fadeVignetteCoroutine);
+                }
                 damageVignette.color = new Color(1, 0, 0, 0.5f);
-                StartCoroutine(nameof(FadeDamageVignette));
+                fadeVignetteCoroutine = StartCoroutine(FadeDamageVignette());
             }
         }
 
         private System.Collections.IEnumerator FadeDamageVignette()
         {
+            if (damageVignette == null) yield break;
+
             float duration = 0.5f;
             float timer = 0f;
             Color startColor = damageVignette.color;
@@ -285,11 +320,18 @@ namespace BobsPetroleum.UI
             while (timer < duration)
             {
                 timer += Time.deltaTime;
-                damageVignette.color = Color.Lerp(startColor, endColor, timer / duration);
+                if (damageVignette != null)
+                {
+                    damageVignette.color = Color.Lerp(startColor, endColor, timer / duration);
+                }
                 yield return null;
             }
 
-            damageVignette.color = endColor;
+            if (damageVignette != null)
+            {
+                damageVignette.color = endColor;
+            }
+            fadeVignetteCoroutine = null;
         }
 
         #endregion
@@ -375,8 +417,11 @@ namespace BobsPetroleum.UI
                 moneyGainedText.gameObject.SetActive(true);
 
                 // Animate and hide
-                StopCoroutine(nameof(HideMoneyGainedCoroutine));
-                StartCoroutine(nameof(HideMoneyGainedCoroutine));
+                if (hideMoneyCoroutine != null)
+                {
+                    StopCoroutine(hideMoneyCoroutine);
+                }
+                hideMoneyCoroutine = StartCoroutine(HideMoneyGainedCoroutine());
             }
         }
 
@@ -387,6 +432,7 @@ namespace BobsPetroleum.UI
             {
                 moneyGainedText.gameObject.SetActive(false);
             }
+            hideMoneyCoroutine = null;
         }
 
         #endregion

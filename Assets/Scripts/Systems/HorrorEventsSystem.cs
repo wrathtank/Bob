@@ -94,6 +94,10 @@ namespace BobsPetroleum.Systems
         private PlayerController player;
         private bool isEventInProgress = false;
         private List<Material> originalTVMaterials = new List<Material>();
+        private List<Light> cachedLights = new List<Light>();
+        private Dictionary<Light, float> cachedLightIntensities = new Dictionary<Light, float>();
+        private List<GameObject> spawnedObjects = new List<GameObject>();
+        private bool lightsAreCached = false;
 
         private void Awake()
         {
@@ -132,6 +136,48 @@ namespace BobsPetroleum.Systems
 
             // Find player
             player = FindObjectOfType<PlayerController>();
+
+            // Cache lights for performance
+            CacheLights();
+        }
+
+        private void OnDestroy()
+        {
+            // Clean up spawned objects
+            foreach (var obj in spawnedObjects)
+            {
+                if (obj != null)
+                {
+                    Destroy(obj);
+                }
+            }
+            spawnedObjects.Clear();
+
+            // Clean up ambient audio source
+            if (ambientAudioSource != null && ambientAudioSource.gameObject != null)
+            {
+                Destroy(ambientAudioSource.gameObject);
+            }
+        }
+
+        /// <summary>
+        /// Cache all lights in scene for flicker performance.
+        /// </summary>
+        public void CacheLights()
+        {
+            cachedLights.Clear();
+            cachedLightIntensities.Clear();
+
+            Light[] lights = FindObjectsOfType<Light>();
+            foreach (var light in lights)
+            {
+                if (light != null)
+                {
+                    cachedLights.Add(light);
+                    cachedLightIntensities[light] = light.intensity;
+                }
+            }
+            lightsAreCached = true;
         }
 
         private void Update()
@@ -324,39 +370,46 @@ namespace BobsPetroleum.Systems
         {
             if (!canFlickerLights) yield break;
 
-            Light[] lights = FindObjectsOfType<Light>();
-            Dictionary<Light, float> originalIntensities = new Dictionary<Light, float>();
-
-            foreach (var light in lights)
+            // Use cached lights for performance
+            if (!lightsAreCached || cachedLights.Count == 0)
             {
-                originalIntensities[light] = light.intensity;
+                CacheLights();
             }
+
+            // Remove destroyed lights from cache
+            cachedLights.RemoveAll(l => l == null);
 
             // Flicker sequence
             int flickerCount = Random.Range(3, 8);
             for (int i = 0; i < flickerCount; i++)
             {
                 // Off
-                foreach (var light in lights)
+                foreach (var light in cachedLights)
                 {
-                    if (light != null)
+                    if (light != null && cachedLightIntensities.ContainsKey(light))
                     {
-                        light.intensity = Random.value < 0.7f ? 0f : originalIntensities[light] * 0.2f;
+                        light.intensity = Random.value < 0.7f ? 0f : cachedLightIntensities[light] * 0.2f;
                     }
                 }
 
                 // Also flicker player flashlight
-                var flashlight = player?.GetComponentInChildren<Flashlight>();
-                flashlight?.TriggerHorrorFlicker();
+                if (player != null)
+                {
+                    var flashlight = player.GetComponentInChildren<Flashlight>();
+                    if (flashlight != null)
+                    {
+                        flashlight.TriggerHorrorFlicker();
+                    }
+                }
 
                 yield return new WaitForSeconds(Random.Range(0.05f, 0.2f));
 
                 // Restore
-                foreach (var light in lights)
+                foreach (var light in cachedLights)
                 {
-                    if (light != null)
+                    if (light != null && cachedLightIntensities.ContainsKey(light))
                     {
-                        light.intensity = originalIntensities[light];
+                        light.intensity = cachedLightIntensities[light];
                     }
                 }
 
@@ -364,11 +417,11 @@ namespace BobsPetroleum.Systems
             }
 
             // Final restoration
-            foreach (var light in lights)
+            foreach (var light in cachedLights)
             {
-                if (light != null)
+                if (light != null && cachedLightIntensities.ContainsKey(light))
                 {
-                    light.intensity = originalIntensities[light];
+                    light.intensity = cachedLightIntensities[light];
                 }
             }
         }
@@ -454,12 +507,13 @@ namespace BobsPetroleum.Systems
             spawnPos += player.transform.right * Random.Range(-10f, 10f);
 
             GameObject shadow = Instantiate(shadowFigurePrefab, spawnPos, Quaternion.identity);
+            spawnedObjects.Add(shadow);
 
             // Face player
             shadow.transform.LookAt(player.transform);
 
             // Destroy after short time
-            Destroy(shadow, 2f);
+            StartCoroutine(DestroyAfterDelay(shadow, 2f));
         }
 
         private void SpawnGhost()
@@ -470,6 +524,7 @@ namespace BobsPetroleum.Systems
             Vector3 spawnPos = player.transform.position + player.transform.forward * 8f;
 
             GameObject ghost = Instantiate(ghostPrefab, spawnPos, Quaternion.identity);
+            spawnedObjects.Add(ghost);
             ghost.transform.LookAt(player.transform);
 
             // Quick fade out
@@ -478,28 +533,48 @@ namespace BobsPetroleum.Systems
 
         private IEnumerator FadeAndDestroyGhost(GameObject ghost)
         {
+            if (ghost == null) yield break;
+
             yield return new WaitForSeconds(0.5f);
 
-            // Fade out
+            if (ghost == null) yield break;
+
+            // Fade out using MaterialPropertyBlock to avoid material leak
             Renderer renderer = ghost.GetComponent<Renderer>();
             if (renderer != null)
             {
-                Material mat = renderer.material;
-                Color color = mat.color;
+                MaterialPropertyBlock propBlock = new MaterialPropertyBlock();
+                Color originalColor = renderer.material.color;
 
                 float timer = 0f;
                 float duration = 0.3f;
 
-                while (timer < duration)
+                while (timer < duration && ghost != null)
                 {
                     timer += Time.deltaTime;
-                    color.a = Mathf.Lerp(1f, 0f, timer / duration);
-                    mat.color = color;
+                    float alpha = Mathf.Lerp(1f, 0f, timer / duration);
+                    renderer.GetPropertyBlock(propBlock);
+                    propBlock.SetColor("_Color", new Color(originalColor.r, originalColor.g, originalColor.b, alpha));
+                    renderer.SetPropertyBlock(propBlock);
                     yield return null;
                 }
             }
 
-            Destroy(ghost);
+            if (ghost != null)
+            {
+                spawnedObjects.Remove(ghost);
+                Destroy(ghost);
+            }
+        }
+
+        private IEnumerator DestroyAfterDelay(GameObject obj, float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            if (obj != null)
+            {
+                spawnedObjects.Remove(obj);
+                Destroy(obj);
+            }
         }
 
         private IEnumerator CreepyPhoneCall()
@@ -529,17 +604,14 @@ namespace BobsPetroleum.Systems
         {
             onJumpScare?.Invoke();
 
-            // Screen flash
-            if (distortionMaterial != null)
-            {
-                // Apply distortion briefly
-            }
-
             // Loud stinger
-            if (jumpScareStingers.Length > 0)
+            if (jumpScareStingers != null && jumpScareStingers.Length > 0)
             {
                 AudioClip stinger = jumpScareStingers[Random.Range(0, jumpScareStingers.Length)];
-                audioSource.PlayOneShot(stinger, 1f);
+                if (stinger != null && audioSource != null)
+                {
+                    audioSource.PlayOneShot(stinger, 1f);
+                }
             }
 
             // Spawn something scary in front of player
@@ -549,11 +621,16 @@ namespace BobsPetroleum.Systems
                 spawnPos.y = player.transform.position.y;
 
                 GameObject scare = Instantiate(ghostPrefab, spawnPos, Quaternion.identity);
+                spawnedObjects.Add(scare);
                 scare.transform.LookAt(player.transform);
 
                 yield return new WaitForSeconds(0.3f);
 
-                Destroy(scare);
+                if (scare != null)
+                {
+                    spawnedObjects.Remove(scare);
+                    Destroy(scare);
+                }
             }
 
             yield return null;
