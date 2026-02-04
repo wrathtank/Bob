@@ -124,9 +124,12 @@ namespace BobsPetroleum.UI
         [Tooltip("Full screen fade image")]
         public Image fadeImage;
 
+        [Header("Player Reference (Auto-found)")]
+        [Tooltip("Assigned automatically if not set")]
+        public PlayerController player;
+        public PlayerHealth playerHealth;
+
         // Private state
-        private PlayerController player;
-        private PlayerHealth playerHealth;
         private PlayerInventory playerInventory;
         private float staminaHideTimer;
         private float lastDisplayedMoney;
@@ -149,10 +152,29 @@ namespace BobsPetroleum.UI
 
         private void Start()
         {
+            // Auto-find player if not assigned
+            AutoFindPlayer();
+
             // Hide optional elements
             HideInteractionPrompt();
             if (lowHealthOverlay != null) lowHealthOverlay.gameObject.SetActive(false);
             if (damageVignette != null) damageVignette.color = new Color(1, 0, 0, 0);
+        }
+
+        /// <summary>
+        /// Auto-find player and register if not assigned.
+        /// </summary>
+        private void AutoFindPlayer()
+        {
+            if (player == null)
+            {
+                player = FindObjectOfType<PlayerController>();
+            }
+
+            if (player != null)
+            {
+                RegisterPlayer(player);
+            }
         }
 
         private void OnDestroy()

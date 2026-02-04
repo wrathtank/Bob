@@ -32,6 +32,10 @@ namespace BobsPetroleum.Core
         [Tooltip("Starting money for players")]
         public int startingMoney = 0;
 
+        [Header("Player Reference")]
+        [Tooltip("Auto-found if not assigned")]
+        public Player.PlayerController player;
+
         [Header("Game State")]
         public int currentDay = 1;
         public bool gameStarted = false;
@@ -69,6 +73,35 @@ namespace BobsPetroleum.Core
             else
             {
                 Destroy(gameObject);
+                return;
+            }
+
+            AutoFindReferences();
+        }
+
+        /// <summary>
+        /// Auto-find references if not assigned in inspector.
+        /// </summary>
+        private void AutoFindReferences()
+        {
+            // Find player
+            if (player == null)
+            {
+                player = FindObjectOfType<Player.PlayerController>();
+            }
+
+            // Find spawn point
+            if (playerSpawnPoint == null)
+            {
+                GameObject spawnObj = GameObject.FindGameObjectWithTag("PlayerSpawn");
+                if (spawnObj == null)
+                {
+                    spawnObj = GameObject.Find("PlayerSpawn");
+                }
+                if (spawnObj != null)
+                {
+                    playerSpawnPoint = spawnObj.transform;
+                }
             }
         }
 

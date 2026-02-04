@@ -87,11 +87,15 @@ namespace BobsPetroleum.Systems
         public UnityEvent<string> onHorrorEventTriggered;
         public UnityEvent onJumpScare;
 
+        [Header("Player Reference (Auto-found)")]
+        [Tooltip("Auto-found if not set")]
+        public Transform player;
+        public Flashlight playerFlashlight;
+
         // State
         private float eventTimer;
         private AudioSource audioSource;
         private AudioSource ambientAudioSource;
-        private PlayerController player;
         private bool isEventInProgress = false;
         private List<Material> originalTVMaterials = new List<Material>();
         private List<Light> cachedLights = new List<Light>();
@@ -134,11 +138,31 @@ namespace BobsPetroleum.Systems
                 }
             }
 
-            // Find player
-            player = FindObjectOfType<PlayerController>();
+            // Auto-find player
+            AutoFindPlayer();
 
             // Cache lights for performance
             CacheLights();
+        }
+
+        /// <summary>
+        /// Auto-find player and flashlight references.
+        /// </summary>
+        private void AutoFindPlayer()
+        {
+            if (player == null)
+            {
+                var playerController = FindObjectOfType<PlayerController>();
+                if (playerController != null)
+                {
+                    player = playerController.transform;
+                }
+            }
+
+            if (playerFlashlight == null && player != null)
+            {
+                playerFlashlight = player.GetComponentInChildren<Flashlight>();
+            }
         }
 
         private void OnDestroy()
