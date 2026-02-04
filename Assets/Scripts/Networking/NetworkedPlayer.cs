@@ -56,6 +56,13 @@ namespace BobsPetroleum.Networking
         [Tooltip("GameObjects to disable on remote players")]
         public GameObject[] ownerOnlyObjects;
 
+        [Header("=== SKIN/MODEL SYNC ===")]
+        [Tooltip("SkinManager reference")]
+        public Player.SkinManager skinManager;
+
+        [Tooltip("Sync model/skin changes")]
+        public bool syncModel = true;
+
         // Network variables
         private NetworkVariable<Vector3> networkPosition = new NetworkVariable<Vector3>(
             default, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
@@ -65,6 +72,9 @@ namespace BobsPetroleum.Networking
 
         private NetworkVariable<NetworkString64> networkAnimation = new NetworkVariable<NetworkString64>(
             default, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+
+        private NetworkVariable<NetworkString64> networkModelTokenId = new NetworkVariable<NetworkString64>(
+            new NetworkString64("000"), NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
 
         private NetworkVariable<float> networkHealth = new NetworkVariable<float>(
             100f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
@@ -81,6 +91,12 @@ namespace BobsPetroleum.Networking
         {
             base.OnNetworkSpawn();
 
+            // Auto-find skin manager
+            if (skinManager == null)
+            {
+                skinManager = GetComponent<Player.SkinManager>();
+            }
+
             if (IsOwner)
             {
                 // This is our player - enable controls
@@ -90,12 +106,27 @@ namespace BobsPetroleum.Networking
                 networkPosition.Value = transform.position;
                 networkRotation.Value = transform.rotation;
 
+                // Sync our current model
+                if (skinManager != null && syncModel)
+                {
+                    networkModelTokenId.Value = new NetworkString64(skinManager.currentModelTokenId);
+                }
+
                 Debug.Log("[NetworkedPlayer] Spawned as OWNER (local player)");
             }
             else
             {
                 // This is someone else's player - disable controls
                 EnableOwnerComponents(false);
+
+                // Subscribe to model changes
+                networkModelTokenId.OnValueChanged += OnModelChanged;
+
+                // Apply their current model
+                if (syncModel)
+                {
+                    ApplyNetworkModel(networkModelTokenId.Value.ToString());
+                }
 
                 // Subscribe to position changes for interpolation
                 networkPosition.OnValueChanged += OnPositionChanged;
@@ -115,8 +146,85 @@ namespace BobsPetroleum.Networking
                 networkPosition.OnValueChanged -= OnPositionChanged;
                 networkRotation.OnValueChanged -= OnRotationChanged;
                 networkAnimation.OnValueChanged -= OnAnimationChanged;
+                networkModelTokenId.OnValueChanged -= OnModelChanged;
             }
         }
+
+        #region Model Sync
+
+        /// <summary>
+        /// Called when remote player changes their model
+        /// </summary>
+        private void OnModelChanged(NetworkString64 oldModel, NetworkString64 newModel)
+        {
+            string tokenId = newModel.ToString();
+            ApplyNetworkModel(tokenId);
+        }
+
+        /// <summary>
+        /// Apply model from network (for remote players)
+        /// </summary>
+        private void ApplyNetworkModel(string tokenId)
+        {
+            if (string.IsNullOrEmpty(tokenId)) return;
+
+            if (skinManager != null)
+            {
+                skinManager.ApplyNetworkModel(tokenId);
+            }
+            else
+            {
+                // Fallback: try to load model directly
+                string path = "PlayerModels/" + tokenId;
+                GameObject modelPrefab = Resources.Load<GameObject>(path);
+                if (modelPrefab != null)
+                {
+                    // Find or create model parent
+                    Transform modelParent = transform.Find("ModelParent");
+                    if (modelParent == null)
+                    {
+                        GameObject parentObj = new GameObject("ModelParent");
+                        parentObj.transform.SetParent(transform);
+                        parentObj.transform.localPosition = Vector3.zero;
+                        modelParent = parentObj.transform;
+                    }
+
+                    // Destroy existing model
+                    foreach (Transform child in modelParent)
+                    {
+                        Destroy(child.gameObject);
+                    }
+
+                    // Spawn new model
+                    GameObject model = Instantiate(modelPrefab, modelParent);
+                    model.transform.localPosition = Vector3.zero;
+                    model.transform.localRotation = Quaternion.identity;
+                    model.name = $"PlayerModel_{tokenId}";
+
+                    // Update animator reference
+                    animator = model.GetComponent<Animator>() ?? model.GetComponentInChildren<Animator>();
+                    simpleAnimator = model.GetComponent<Animation.SimpleAnimationPlayer>() ??
+                                    model.GetComponentInChildren<Animation.SimpleAnimationPlayer>();
+                }
+            }
+
+            Debug.Log($"[NetworkedPlayer] Applied network model: {tokenId}");
+        }
+
+        /// <summary>
+        /// Call this when local player changes their model
+        /// </summary>
+        public void SetModel(string tokenId)
+        {
+            if (!IsOwner) return;
+
+            // Update network variable (syncs to all clients)
+            networkModelTokenId.Value = new NetworkString64(tokenId);
+
+            Debug.Log($"[NetworkedPlayer] Set model to: {tokenId}");
+        }
+
+        #endregion
 
         private void EnableOwnerComponents(bool enable)
         {

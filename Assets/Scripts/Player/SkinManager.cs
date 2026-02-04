@@ -6,15 +6,46 @@ using System.Runtime.InteropServices;
 namespace BobsPetroleum.Player
 {
     /// <summary>
-    /// Skin manager with NFT verification support.
-    /// Allows players to apply skins from NFT ownership or purchased in-game.
+    /// Skin manager with NFT verification support for 250 unique character models.
+    /// All models use IDENTICAL animation names - just swap the prefab!
+    ///
+    /// MODEL NAMING: Models are named by their NFT token ID (e.g., "001", "002", "250")
+    ///
+    /// ANIMATION REQUIREMENT: All 250 models MUST have these animations:
+    /// - Idle, Walk, Run, Sprint
+    /// - Jump, Fall, Land
+    /// - Attack, Die, Interact
+    /// See PlayerAnimationNames class for full list.
     /// </summary>
     public class SkinManager : MonoBehaviour
     {
         public static SkinManager Instance { get; private set; }
 
-        [Header("Player References")]
-        [Tooltip("Player mesh renderer(s) to apply skins to")]
+        [Header("=== MODEL SWAPPING ===")]
+        [Tooltip("Parent transform where player model is spawned")]
+        public Transform modelParent;
+
+        [Tooltip("Currently active model instance")]
+        public GameObject currentModelInstance;
+
+        [Tooltip("Animator on current model")]
+        public Animator currentAnimator;
+
+        [Tooltip("SimpleAnimationPlayer on current model")]
+        public Animation.SimpleAnimationPlayer currentSimpleAnimator;
+
+        [Header("=== MODEL LIBRARY (250 NFT MODELS) ===")]
+        [Tooltip("Folder path for model prefabs (Resources folder)")]
+        public string modelResourcePath = "PlayerModels/";
+
+        [Tooltip("Default model token ID (for non-NFT players)")]
+        public string defaultModelId = "000";
+
+        [Tooltip("Total number of NFT models")]
+        public int totalNFTModels = 250;
+
+        [Header("=== LEGACY SKIN SUPPORT ===")]
+        [Tooltip("Player mesh renderer(s) for material-only skins")]
         public List<Renderer> playerRenderers = new List<Renderer>();
 
         [Tooltip("Player skinned mesh renderer")]
@@ -30,6 +61,9 @@ namespace BobsPetroleum.Player
         [Header("Current Skin")]
         [Tooltip("Currently applied skin")]
         public SkinData currentSkin;
+
+        [Tooltip("Current model token ID")]
+        public string currentModelTokenId = "000";
 
         [Header("NFT Integration")]
         [Tooltip("Enable NFT skin verification")]
@@ -53,6 +87,7 @@ namespace BobsPetroleum.Player
         // Runtime
         private List<SkinData> ownedSkins = new List<SkinData>();
         private List<SkinData> nftOwnedSkins = new List<SkinData>();
+        private List<string> ownedNFTTokenIds = new List<string>(); // Token IDs from NFT check
         private bool isNFTCheckComplete;
 
         // WebGL JS Interface
@@ -83,14 +118,29 @@ namespace BobsPetroleum.Player
 
         private void Start()
         {
-            // Load saved skin
-            LoadSavedSkin();
+            // Create model parent if needed
+            if (modelParent == null)
+            {
+                GameObject parentObj = new GameObject("ModelParent");
+                parentObj.transform.SetParent(transform);
+                parentObj.transform.localPosition = Vector3.zero;
+                parentObj.transform.localRotation = Quaternion.identity;
+                modelParent = parentObj.transform;
+            }
 
             // Start NFT check if enabled
             if (enableNFTSkins)
             {
                 CheckNFTSkins();
             }
+
+            // Load saved model (waits for NFT check in WebGL)
+#if !UNITY_WEBGL || UNITY_EDITOR
+            LoadSavedModel();
+#endif
+
+            // Load saved skin
+            LoadSavedSkin();
 
             // Apply default if none selected
             if (currentSkin == null && defaultSkin != null)
@@ -99,10 +149,218 @@ namespace BobsPetroleum.Player
             }
         }
 
-        #region Skin Management
+        #region Model Swapping (250 NFT Models)
 
         /// <summary>
-        /// Apply a skin.
+        /// Swap player model by NFT token ID (e.g., "001", "042", "250")
+        /// All models have identical animation names!
+        /// </summary>
+        public void SwapModelByTokenId(string tokenId)
+        {
+            if (string.IsNullOrEmpty(tokenId))
+            {
+                tokenId = defaultModelId;
+            }
+
+            // Load model prefab from Resources
+            string path = modelResourcePath + tokenId;
+            GameObject modelPrefab = Resources.Load<GameObject>(path);
+
+            if (modelPrefab == null)
+            {
+                Debug.LogWarning($"[SkinManager] Model not found: {path}, using default");
+                modelPrefab = Resources.Load<GameObject>(modelResourcePath + defaultModelId);
+
+                if (modelPrefab == null)
+                {
+                    Debug.LogError("[SkinManager] Default model not found!");
+                    return;
+                }
+            }
+
+            SwapModel(modelPrefab, tokenId);
+        }
+
+        /// <summary>
+        /// Swap player model with a prefab directly
+        /// </summary>
+        public void SwapModel(GameObject modelPrefab, string tokenId = "")
+        {
+            if (modelPrefab == null) return;
+
+            // Ensure parent exists
+            if (modelParent == null)
+            {
+                modelParent = transform;
+            }
+
+            // Destroy current model
+            if (currentModelInstance != null)
+            {
+                Destroy(currentModelInstance);
+            }
+
+            // Spawn new model
+            currentModelInstance = Instantiate(modelPrefab, modelParent);
+            currentModelInstance.transform.localPosition = Vector3.zero;
+            currentModelInstance.transform.localRotation = Quaternion.identity;
+            currentModelInstance.transform.localScale = Vector3.one;
+            currentModelInstance.name = $"PlayerModel_{tokenId}";
+
+            // Get animation components
+            currentAnimator = currentModelInstance.GetComponent<Animator>();
+            if (currentAnimator == null)
+            {
+                currentAnimator = currentModelInstance.GetComponentInChildren<Animator>();
+            }
+
+            currentSimpleAnimator = currentModelInstance.GetComponent<Animation.SimpleAnimationPlayer>();
+            if (currentSimpleAnimator == null)
+            {
+                currentSimpleAnimator = currentModelInstance.GetComponentInChildren<Animation.SimpleAnimationPlayer>();
+            }
+
+            // Update renderers list
+            playerRenderers.Clear();
+            playerRenderers.AddRange(currentModelInstance.GetComponentsInChildren<Renderer>());
+
+            skinnedMeshRenderer = currentModelInstance.GetComponentInChildren<SkinnedMeshRenderer>();
+
+            // Store token ID
+            currentModelTokenId = tokenId;
+
+            // Save selection
+            PlayerPrefs.SetString("CurrentModelTokenId", tokenId);
+            PlayerPrefs.Save();
+
+            // Notify network
+            SyncModelToNetwork(tokenId);
+
+            Debug.Log($"[SkinManager] Swapped to model: {tokenId}");
+        }
+
+        /// <summary>
+        /// Check if player owns NFT model by token ID
+        /// </summary>
+        public bool OwnsNFTModel(string tokenId)
+        {
+            // Check if any NFT skin matches this token ID
+            foreach (var skin in nftOwnedSkins)
+            {
+                if (skin.nftTokenId.ToString().PadLeft(3, '0') == tokenId)
+                {
+                    return true;
+                }
+            }
+
+            // Also check if token ID is in our owned list
+            return ownedNFTTokenIds.Contains(tokenId);
+        }
+
+        /// <summary>
+        /// Get list of owned NFT model token IDs
+        /// </summary>
+        public List<string> GetOwnedModelIds()
+        {
+            List<string> owned = new List<string>();
+
+            // Always include default
+            owned.Add(defaultModelId);
+
+            // Add NFT owned
+            owned.AddRange(ownedNFTTokenIds);
+
+            return owned;
+        }
+
+        /// <summary>
+        /// Load saved model on start
+        /// </summary>
+        private void LoadSavedModel()
+        {
+            string savedTokenId = PlayerPrefs.GetString("CurrentModelTokenId", defaultModelId);
+
+            // Only apply if owned
+            if (savedTokenId == defaultModelId || OwnsNFTModel(savedTokenId))
+            {
+                SwapModelByTokenId(savedTokenId);
+            }
+            else
+            {
+                SwapModelByTokenId(defaultModelId);
+            }
+        }
+
+        /// <summary>
+        /// Sync model selection across network
+        /// </summary>
+        private void SyncModelToNetwork(string tokenId)
+        {
+#if UNITY_NETCODE
+            // If we have NetworkedPlayer, sync the model
+            var networkedPlayer = GetComponent<Networking.NetworkedPlayer>();
+            if (networkedPlayer != null)
+            {
+                networkedPlayer.SetModel(tokenId);
+            }
+#endif
+        }
+
+        /// <summary>
+        /// Called from network to apply model (for remote players)
+        /// </summary>
+        public void ApplyNetworkModel(string tokenId)
+        {
+            SwapModelByTokenId(tokenId);
+        }
+
+        #endregion
+
+        #region Animation Helpers
+
+        /// <summary>
+        /// Play animation on current model (works with both Animator and SimpleAnimationPlayer)
+        /// </summary>
+        public void PlayAnimation(string animationName)
+        {
+            if (currentSimpleAnimator != null)
+            {
+                currentSimpleAnimator.Play(animationName);
+            }
+            else if (currentAnimator != null)
+            {
+                currentAnimator.Play(animationName);
+            }
+        }
+
+        /// <summary>
+        /// Get current animation name
+        /// </summary>
+        public string GetCurrentAnimationName()
+        {
+            if (currentSimpleAnimator != null)
+            {
+                return currentSimpleAnimator.GetCurrentAnimationName();
+            }
+
+            if (currentAnimator != null)
+            {
+                var clipInfo = currentAnimator.GetCurrentAnimatorClipInfo(0);
+                if (clipInfo.Length > 0)
+                {
+                    return clipInfo[0].clip.name;
+                }
+            }
+
+            return "";
+        }
+
+        #endregion
+
+        #region Skin Management (Material-based)
+
+        /// <summary>
+        /// Apply a skin (material/mesh change, not full model swap).
         /// </summary>
         public void ApplySkin(SkinData skin)
         {
@@ -117,7 +375,15 @@ namespace BobsPetroleum.Player
 
             currentSkin = skin;
 
-            // Apply material
+            // If it's an NFT skin with a token ID, swap the whole model
+            if (skin.isNFTSkin && skin.nftTokenId >= 0)
+            {
+                string tokenId = skin.nftTokenId.ToString().PadLeft(3, '0');
+                SwapModelByTokenId(tokenId);
+                return;
+            }
+
+            // Otherwise, just apply material
             if (skin.skinMaterial != null)
             {
                 foreach (var renderer in playerRenderers)
@@ -270,15 +536,18 @@ namespace BobsPetroleum.Player
 
         /// <summary>
         /// Called from JavaScript with NFT ownership data.
-        /// Expected format: JSON array of token IDs owned.
+        /// Expected format: JSON array of token IDs owned (e.g., [1, 42, 150, 250])
+        /// Models are named by token ID: "001", "042", "150", "250"
         /// </summary>
         public void OnNFTOwnershipReceived(string jsonData)
         {
             isNFTCheckComplete = true;
+            ownedNFTTokenIds.Clear();
 
             if (string.IsNullOrEmpty(jsonData))
             {
-                Debug.Log("[SkinManager] No NFTs owned");
+                Debug.Log("[SkinManager] No NFTs owned - using default model");
+                LoadSavedModel();
                 return;
             }
 
@@ -293,15 +562,21 @@ namespace BobsPetroleum.Player
 
                     foreach (int tokenId in data.tokenIds)
                     {
-                        // Find skin by NFT token ID
+                        // Store as padded string (001, 042, 250)
+                        string paddedId = tokenId.ToString().PadLeft(3, '0');
+                        ownedNFTTokenIds.Add(paddedId);
+
+                        Debug.Log($"[SkinManager] NFT model unlocked: {paddedId}");
+
+                        // Also find matching SkinData if exists
                         SkinData matchingSkin = allSkins.Find(s => s.nftTokenId == tokenId);
                         if (matchingSkin != null)
                         {
                             nftOwnedSkins.Add(matchingSkin);
-                            Debug.Log($"[SkinManager] NFT skin unlocked: {matchingSkin.skinName}");
                         }
                     }
 
+                    Debug.Log($"[SkinManager] {ownedNFTTokenIds.Count} NFT models available!");
                     onNFTSkinsLoaded?.Invoke(nftOwnedSkins);
                 }
             }
@@ -309,6 +584,9 @@ namespace BobsPetroleum.Player
             {
                 Debug.LogError($"[SkinManager] Error parsing NFT data: {e.Message}");
             }
+
+            // Now load the saved model (after NFT check)
+            LoadSavedModel();
         }
 
         #endregion
