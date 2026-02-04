@@ -1,6 +1,8 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using System.Collections;
+using System.Collections.Generic;
 using BobsPetroleum.Core;
 using BobsPetroleum.Player;
 using BobsPetroleum.Systems;
@@ -8,14 +10,28 @@ using BobsPetroleum.Systems;
 namespace BobsPetroleum.UI
 {
     /// <summary>
-    /// Centralized HUD manager displaying health, stamina, money, objectives, and interactions.
-    /// Essential for player feedback in an S-tier game.
+    /// COMPLETE HUD MANAGER - Everything you need on screen!
+    /// Displays health, money, Bob's status, objectives, and more.
+    ///
+    /// SETUP:
+    /// 1. Create Canvas with all UI elements
+    /// 2. Drag elements into the slots below
+    /// 3. Done! HUD auto-updates everything.
+    ///
+    /// UI ELEMENTS NEEDED:
+    /// - Health bar (Image with Fill)
+    /// - Money text (TMP_Text)
+    /// - Bob's health bar (Image with Fill)
+    /// - Hamburger count (TMP_Text)
+    /// - Objective text (TMP_Text)
+    /// - Crosshair (Image)
+    /// - Notification popup (TMP_Text + Animator)
     /// </summary>
     public class HUDManager : MonoBehaviour
     {
         public static HUDManager Instance { get; private set; }
 
-        [Header("Health Display")]
+        [Header("=== PLAYER HEALTH ===")]
         [Tooltip("Health bar fill image")]
         public Image healthBarFill;
 
@@ -103,14 +119,84 @@ namespace BobsPetroleum.UI
         [Tooltip("Compass marker prefab")]
         public GameObject compassMarkerPrefab;
 
-        [Header("Minimap")]
+        [Header("=== BOB'S STATUS ===")]
+        [Tooltip("Bob's health bar fill")]
+        public Image bobHealthBarFill;
+
+        [Tooltip("Bob's health text")]
+        public TMP_Text bobHealthText;
+
+        [Tooltip("Bob's status text (Dying/Recovering/Revived)")]
+        public TMP_Text bobStatusText;
+
+        [Tooltip("Container for Bob's status (hide when not relevant)")]
+        public GameObject bobStatusContainer;
+
+        [Header("=== HAMBURGER COUNT ===")]
+        [Tooltip("Hamburger count text")]
+        public TMP_Text hamburgerCountText;
+
+        [Tooltip("Hamburger icon image")]
+        public Image hamburgerIcon;
+
+        [Tooltip("Hamburger container")]
+        public GameObject hamburgerContainer;
+
+        [Header("=== NIGHT DISPLAY (7 Night Runs) ===")]
+        [Tooltip("Current night text")]
+        public TMP_Text nightText;
+
+        [Tooltip("Night progress bar")]
+        public Image nightProgressFill;
+
+        [Tooltip("Night container (hide in Forever Mode)")]
+        public GameObject nightContainer;
+
+        [Header("=== FPS COUNTER ===")]
+        [Tooltip("FPS text display")]
+        public TMP_Text fpsText;
+
+        [Tooltip("FPS container")]
+        public GameObject fpsContainer;
+
+        [Tooltip("Update FPS every X seconds")]
+        public float fpsUpdateInterval = 0.5f;
+
+        [Header("=== ITEM PICKUP NOTIFICATIONS ===")]
+        [Tooltip("Item pickup text")]
+        public TMP_Text itemPickupText;
+
+        [Tooltip("Item pickup icon")]
+        public Image itemPickupIcon;
+
+        [Tooltip("Item pickup animator")]
+        public Animator itemPickupAnimator;
+
+        [Header("=== QUICK MESSAGE ===")]
+        [Tooltip("Quick message text (center screen)")]
+        public TMP_Text quickMessageText;
+
+        [Tooltip("Quick message animator")]
+        public Animator quickMessageAnimator;
+
+        [Header("=== WEAPON DISPLAY ===")]
+        [Tooltip("Current weapon name")]
+        public TMP_Text weaponNameText;
+
+        [Tooltip("Ammo count text")]
+        public TMP_Text ammoText;
+
+        [Tooltip("Weapon icon")]
+        public Image weaponIcon;
+
+        [Header("=== MINIMAP ===")]
         [Tooltip("Minimap camera")]
         public Camera minimapCamera;
 
         [Tooltip("Minimap player icon")]
         public RectTransform minimapPlayerIcon;
 
-        [Header("Damage Indicators")]
+        [Header("=== DAMAGE INDICATORS ===")]
         [Tooltip("Damage vignette overlay")]
         public Image damageVignette;
 
@@ -131,11 +217,21 @@ namespace BobsPetroleum.UI
 
         // Private state
         private PlayerInventory playerInventory;
+        private BobCharacter bob;
         private float staminaHideTimer;
         private float lastDisplayedMoney;
         private Color staminaBarDefaultColor;
         private Coroutine fadeVignetteCoroutine;
         private Coroutine hideMoneyCoroutine;
+
+        // FPS tracking
+        private float fpsTimer;
+        private int frameCount;
+        private float currentFPS;
+
+        // Item pickup queue
+        private Queue<ItemPickupInfo> itemPickupQueue = new Queue<ItemPickupInfo>();
+        private bool isShowingPickup = false;
 
         private void Awake()
         {
@@ -155,10 +251,19 @@ namespace BobsPetroleum.UI
             // Auto-find player if not assigned
             AutoFindPlayer();
 
+            // Auto-find Bob
+            bob = BobCharacter.Instance ?? FindObjectOfType<BobCharacter>();
+
             // Hide optional elements
             HideInteractionPrompt();
             if (lowHealthOverlay != null) lowHealthOverlay.gameObject.SetActive(false);
             if (damageVignette != null) damageVignette.color = new Color(1, 0, 0, 0);
+
+            // Setup night display based on game mode
+            UpdateNightDisplayVisibility();
+
+            // Setup FPS display based on settings
+            UpdateFPSVisibility();
         }
 
         /// <summary>
@@ -204,6 +309,10 @@ namespace BobsPetroleum.UI
             UpdateDayTimeDisplay();
             UpdateCompass();
             UpdateLowHealthEffect();
+            UpdateBobStatus();
+            UpdateHamburgerCount();
+            UpdateNightProgress();
+            UpdateFPS();
         }
 
         #region Player Registration
@@ -658,6 +767,343 @@ namespace BobsPetroleum.UI
             {
                 crosshair.gameObject.SetActive(visible);
             }
+        }
+
+        #endregion
+
+        #region Bob Status Display
+
+        private void UpdateBobStatus()
+        {
+            if (bob == null)
+            {
+                bob = BobCharacter.Instance ?? FindObjectOfType<BobCharacter>();
+                if (bob == null)
+                {
+                    if (bobStatusContainer != null) bobStatusContainer.SetActive(false);
+                    return;
+                }
+            }
+
+            if (bobStatusContainer != null) bobStatusContainer.SetActive(true);
+
+            // Update Bob's health bar
+            if (bobHealthBarFill != null)
+            {
+                float healthPercent = bob.CurrentHealth / bob.maxHealth;
+                bobHealthBarFill.fillAmount = healthPercent;
+
+                // Color based on health
+                if (healthPercent <= 0.25f)
+                    bobHealthBarFill.color = Color.red;
+                else if (healthPercent <= 0.5f)
+                    bobHealthBarFill.color = new Color(1f, 0.5f, 0f); // Orange
+                else if (healthPercent <= 0.75f)
+                    bobHealthBarFill.color = Color.yellow;
+                else
+                    bobHealthBarFill.color = Color.green;
+            }
+
+            // Update health text
+            if (bobHealthText != null)
+            {
+                bobHealthText.text = $"Bob: {Mathf.CeilToInt(bob.CurrentHealth)}/{Mathf.CeilToInt(bob.maxHealth)}";
+            }
+
+            // Update status text
+            if (bobStatusText != null)
+            {
+                float healthPercent = bob.CurrentHealth / bob.maxHealth;
+                if (bob.IsRevived)
+                    bobStatusText.text = "<color=green>REVIVED!</color>";
+                else if (bob.IsDead)
+                    bobStatusText.text = "<color=red>DEAD!</color>";
+                else if (healthPercent < 0.25f)
+                    bobStatusText.text = "<color=red>CRITICAL!</color>";
+                else if (healthPercent < 0.5f)
+                    bobStatusText.text = "<color=orange>DYING</color>";
+                else if (healthPercent < 0.75f)
+                    bobStatusText.text = "<color=yellow>RECOVERING</color>";
+                else
+                    bobStatusText.text = "<color=green>STABLE</color>";
+            }
+        }
+
+        #endregion
+
+        #region Hamburger Display
+
+        private void UpdateHamburgerCount()
+        {
+            if (playerInventory == null || hamburgerCountText == null) return;
+
+            int count = playerInventory.Hamburgers;
+
+            hamburgerCountText.text = count.ToString();
+
+            // Pulse icon when you have hamburgers
+            if (hamburgerIcon != null)
+            {
+                hamburgerIcon.color = count > 0 ? Color.white : new Color(0.5f, 0.5f, 0.5f, 0.5f);
+            }
+        }
+
+        /// <summary>
+        /// Flash hamburger display when picking one up.
+        /// </summary>
+        public void FlashHamburgerPickup()
+        {
+            if (hamburgerContainer != null)
+            {
+                StartCoroutine(FlashUIElement(hamburgerContainer));
+            }
+        }
+
+        private IEnumerator FlashUIElement(GameObject element)
+        {
+            var group = element.GetComponent<CanvasGroup>();
+            if (group == null) group = element.AddComponent<CanvasGroup>();
+
+            for (int i = 0; i < 3; i++)
+            {
+                group.alpha = 0.5f;
+                yield return new WaitForSeconds(0.1f);
+                group.alpha = 1f;
+                yield return new WaitForSeconds(0.1f);
+            }
+        }
+
+        #endregion
+
+        #region Night Progress (7 Night Runs)
+
+        private void UpdateNightDisplayVisibility()
+        {
+            var gameState = GameStateManager.Instance;
+            bool is7Night = gameState != null && gameState.isSevenNightRun;
+
+            if (nightContainer != null)
+            {
+                nightContainer.SetActive(is7Night);
+            }
+        }
+
+        private void UpdateNightProgress()
+        {
+            var gameState = GameStateManager.Instance;
+            if (gameState == null || !gameState.isSevenNightRun) return;
+
+            // Update night text
+            if (nightText != null)
+            {
+                nightText.text = $"Night {gameState.currentNight} / 7";
+            }
+
+            // Update progress bar (progress through current night)
+            if (nightProgressFill != null && DayNightCycle.Instance != null)
+            {
+                float nightProgress = DayNightCycle.Instance.NightProgress;
+                nightProgressFill.fillAmount = nightProgress;
+            }
+        }
+
+        #endregion
+
+        #region FPS Counter
+
+        private void UpdateFPSVisibility()
+        {
+            // Check settings
+            bool showFPS = SettingsManager.Instance?.GetShowFPS() ?? false;
+
+            if (fpsContainer != null)
+            {
+                fpsContainer.SetActive(showFPS);
+            }
+        }
+
+        private void UpdateFPS()
+        {
+            if (fpsText == null || fpsContainer == null || !fpsContainer.activeSelf) return;
+
+            frameCount++;
+            fpsTimer += Time.unscaledDeltaTime;
+
+            if (fpsTimer >= fpsUpdateInterval)
+            {
+                currentFPS = frameCount / fpsTimer;
+                frameCount = 0;
+                fpsTimer = 0f;
+
+                // Color based on FPS
+                Color fpsColor = Color.green;
+                if (currentFPS < 30) fpsColor = Color.red;
+                else if (currentFPS < 60) fpsColor = Color.yellow;
+
+                fpsText.text = $"<color=#{ColorUtility.ToHtmlStringRGB(fpsColor)}>{Mathf.RoundToInt(currentFPS)} FPS</color>";
+            }
+        }
+
+        /// <summary>
+        /// Toggle FPS display visibility.
+        /// </summary>
+        public void ToggleFPS()
+        {
+            if (fpsContainer != null)
+            {
+                fpsContainer.SetActive(!fpsContainer.activeSelf);
+            }
+        }
+
+        #endregion
+
+        #region Item Pickup Notifications
+
+        /// <summary>
+        /// Show item pickup notification.
+        /// </summary>
+        public void ShowItemPickup(string itemName, Sprite icon = null, int quantity = 1)
+        {
+            itemPickupQueue.Enqueue(new ItemPickupInfo
+            {
+                name = itemName,
+                icon = icon,
+                quantity = quantity
+            });
+
+            if (!isShowingPickup)
+            {
+                StartCoroutine(ProcessPickupQueue());
+            }
+        }
+
+        private IEnumerator ProcessPickupQueue()
+        {
+            isShowingPickup = true;
+
+            while (itemPickupQueue.Count > 0)
+            {
+                var pickup = itemPickupQueue.Dequeue();
+
+                // Update UI
+                if (itemPickupText != null)
+                {
+                    string qtyText = pickup.quantity > 1 ? $" x{pickup.quantity}" : "";
+                    itemPickupText.text = $"+ {pickup.name}{qtyText}";
+                }
+
+                if (itemPickupIcon != null)
+                {
+                    if (pickup.icon != null)
+                    {
+                        itemPickupIcon.sprite = pickup.icon;
+                        itemPickupIcon.gameObject.SetActive(true);
+                    }
+                    else
+                    {
+                        itemPickupIcon.gameObject.SetActive(false);
+                    }
+                }
+
+                // Play animation
+                if (itemPickupAnimator != null)
+                {
+                    itemPickupAnimator.SetTrigger("Show");
+                }
+
+                yield return new WaitForSeconds(1.5f);
+            }
+
+            isShowingPickup = false;
+        }
+
+        private struct ItemPickupInfo
+        {
+            public string name;
+            public Sprite icon;
+            public int quantity;
+        }
+
+        #endregion
+
+        #region Quick Messages
+
+        /// <summary>
+        /// Show a quick message in the center of screen.
+        /// </summary>
+        public void ShowQuickMessage(string message, float duration = 2f)
+        {
+            if (quickMessageText != null)
+            {
+                quickMessageText.text = message;
+            }
+
+            if (quickMessageAnimator != null)
+            {
+                quickMessageAnimator.SetTrigger("Show");
+            }
+
+            CancelInvoke(nameof(HideQuickMessage));
+            Invoke(nameof(HideQuickMessage), duration);
+        }
+
+        private void HideQuickMessage()
+        {
+            if (quickMessageAnimator != null)
+            {
+                quickMessageAnimator.SetTrigger("Hide");
+            }
+        }
+
+        #endregion
+
+        #region Weapon Display
+
+        /// <summary>
+        /// Update weapon display.
+        /// </summary>
+        public void UpdateWeaponDisplay(string weaponName, int currentAmmo, int maxAmmo, Sprite icon = null)
+        {
+            if (weaponNameText != null)
+            {
+                weaponNameText.text = weaponName;
+            }
+
+            if (ammoText != null)
+            {
+                if (maxAmmo > 0)
+                {
+                    ammoText.text = $"{currentAmmo} / {maxAmmo}";
+
+                    // Color based on ammo
+                    float ammoPercent = (float)currentAmmo / maxAmmo;
+                    if (ammoPercent <= 0.25f)
+                        ammoText.color = Color.red;
+                    else if (ammoPercent <= 0.5f)
+                        ammoText.color = Color.yellow;
+                    else
+                        ammoText.color = Color.white;
+                }
+                else
+                {
+                    ammoText.text = "∞"; // Infinite ammo
+                    ammoText.color = Color.white;
+                }
+            }
+
+            if (weaponIcon != null && icon != null)
+            {
+                weaponIcon.sprite = icon;
+            }
+        }
+
+        /// <summary>
+        /// Hide weapon display (when unarmed).
+        /// </summary>
+        public void HideWeaponDisplay()
+        {
+            if (weaponNameText != null) weaponNameText.text = "";
+            if (ammoText != null) ammoText.text = "";
         }
 
         #endregion

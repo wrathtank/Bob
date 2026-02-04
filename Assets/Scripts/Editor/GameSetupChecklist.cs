@@ -130,11 +130,17 @@ namespace BobsPetroleum.Editor
             DrawCheckItem("GameManager", FindObjectOfType<Core.GameManager>() != null,
                 "Controls game state, days, win/lose", () => CreateManager<Core.GameManager>("GameManager"));
 
+            DrawCheckItem("GameStateManager", FindObjectOfType<Core.GameStateManager>() != null,
+                "Clear game states (Playing, Paused, GameOver)", () => CreateManager<Core.GameStateManager>("GameStateManager"));
+
             DrawCheckItem("GameFlowController", FindObjectOfType<Core.GameFlowController>() != null,
                 "THE GLUE - connects all systems", () => CreateManager<Core.GameFlowController>("GameFlowController"));
 
             DrawCheckItem("GameBootstrapper", FindObjectOfType<Core.GameBootstrapper>() != null,
                 "Auto-creates managers on Play", () => CreateManager<Core.GameBootstrapper>("GameBootstrapper"));
+
+            DrawCheckItem("SceneLoader", FindObjectOfType<Core.SceneLoader>() != null,
+                "Loading screens between scenes", () => CreateManager<Core.SceneLoader>("SceneLoader"));
 
             DrawCheckItem("AudioManager", FindObjectOfType<Audio.AudioManager>() != null,
                 "Handles all game sounds", () => CreateManager<Audio.AudioManager>("AudioManager"));
@@ -374,14 +380,36 @@ namespace BobsPetroleum.Editor
             DrawCheckItem("EventSystem", FindObjectOfType<UnityEngine.EventSystems.EventSystem>() != null,
                 "UI input handling");
 
-            DrawCheckItem("HUDManager", FindObjectOfType<UI.HUDManager>() != null,
-                "Health, stamina, money display");
+            EditorGUILayout.Space(5);
+            EditorGUILayout.LabelField("Main UI Systems:", EditorStyles.miniLabel);
 
-            DrawCheckItem("PauseMenu", FindObjectOfType<UI.PauseMenu>() != null,
-                "Escape menu");
+            DrawCheckItem("MainMenuManager", FindObjectOfType<UI.MainMenuManager>() != null,
+                "Main menu with Play, Settings, Quit", () => CreateManager<UI.MainMenuManager>("MainMenuManager"));
+
+            DrawCheckItem("HUDManager", FindObjectOfType<UI.HUDManager>() != null,
+                "Health, money, Bob status, hamburgers", () => CreateManager<UI.HUDManager>("HUDManager"));
+
+            DrawCheckItem("PauseMenuManager", FindObjectOfType<UI.PauseMenuManager>() != null,
+                "Pause menu with Resume, Settings, Quit", () => CreateManager<UI.PauseMenuManager>("PauseMenuManager"));
+
+            DrawCheckItem("SettingsManager", FindObjectOfType<UI.SettingsManager>() != null,
+                "Audio, graphics, controls settings", () => CreateManager<UI.SettingsManager>("SettingsManager"));
+
+            DrawCheckItem("TutorialManager", FindObjectOfType<UI.TutorialManager>() != null,
+                "Tutorial for new players", () => CreateManager<UI.TutorialManager>("TutorialManager"));
+
+            EditorGUILayout.Space(5);
+            EditorGUILayout.LabelField("Optional UI:", EditorStyles.miniLabel);
 
             DrawCheckItem("MinimapSystem", FindObjectOfType<UI.MinimapSystem>() != null,
                 "Minimap display");
+
+            EditorGUILayout.HelpBox(
+                "UI Setup Tips:\n" +
+                "- MainMenuManager: Create Canvas > Add panels and buttons > Wire to slots\n" +
+                "- HUDManager: Health bars, money text, crosshair\n" +
+                "- Use Window > Bob's Petroleum > Prefab Creator for pre-made UI",
+                MessageType.Info);
         }
 
         private void DrawWorldChecklist()
