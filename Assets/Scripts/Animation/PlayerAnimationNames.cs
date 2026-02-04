@@ -1,328 +1,252 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 namespace BobsPetroleum.Animation
 {
     /// <summary>
-    /// STANDARDIZED ANIMATION NAMES FOR ALL 250 NFT PLAYER MODELS
+    /// YOUR ANIMATION NAMES - CONFIGURE IN ONE PLACE!
+    /// Create one of these: Assets > Create > Bob's Petroleum > Animation Config
     ///
-    /// ALL models MUST use these EXACT animation names!
-    /// This ensures any model works with any player regardless of NFT.
+    /// All 250 NFT models use whatever names YOU put here.
+    /// Missing an animation? No problem - it falls back to Idle/Walk.
     ///
-    /// ARTIST INSTRUCTIONS:
-    /// 1. Export animations with THESE EXACT NAMES
-    /// 2. All 250 models must have ALL these animations
-    /// 3. Animation timing can vary, but names must match
+    /// GOOFY STYLE:
+    /// - No gun animations needed! Walk pose = holding guns (Frankenstein arms)
+    /// - Attack animation doubles for shooting
+    /// - Keep it simple and cartoony!
     /// </summary>
-    public static class PlayerAnimationNames
+    [CreateAssetMenu(fileName = "AnimationConfig", menuName = "Bob's Petroleum/Animation Config")]
+    public class AnimationConfig : ScriptableObject
     {
-        // ===========================================
-        // MOVEMENT - REQUIRED
-        // ===========================================
+        public static AnimationConfig Instance { get; private set; }
 
-        /// <summary>Standing still</summary>
-        public const string Idle = "Idle";
+        [Header("=== YOUR ANIMATION NAMES ===")]
+        [Tooltip("Fill in the animation names YOUR models use")]
 
-        /// <summary>Slow movement</summary>
-        public const string Walk = "Walk";
+        [Header("Movement (Required)")]
+        public string idle = "Idle";
+        public string walk = "Walk";
+        public string run = "Run";
 
-        /// <summary>Normal movement</summary>
-        public const string Run = "Run";
+        [Header("Actions (Optional - falls back to Idle/Walk)")]
+        public string jump = "";
+        public string fall = "";
+        public string attack = "";
+        public string die = "";
+        public string interact = "";
 
-        /// <summary>Fast movement (shift held)</summary>
-        public const string Sprint = "Sprint";
+        [Header("Emotes (Optional)")]
+        public string wave = "";
+        public string dance = "";
+        public string victory = "";
 
-        /// <summary>Moving backwards</summary>
-        public const string WalkBack = "WalkBack";
+        [Header("Special (Optional)")]
+        public string spawnFromTube = "";
+        public string consume = "";
+        public string throwNet = "";
 
-        /// <summary>Strafing left</summary>
-        public const string StrafeLeft = "StrafeLeft";
+        [Header("=== FALLBACK SETTINGS ===")]
+        [Tooltip("Animation to use when requested one is missing")]
+        public string fallbackAnimation = "Idle";
 
-        /// <summary>Strafing right</summary>
-        public const string StrafeRight = "StrafeRight";
+        [Tooltip("Show debug messages for missing animations")]
+        public bool debugMode = false;
 
-        // ===========================================
-        // JUMPING/FALLING - REQUIRED
-        // ===========================================
+        // Lookup table built at runtime
+        private Dictionary<string, string> lookupTable;
 
-        /// <summary>Jump start</summary>
-        public const string Jump = "Jump";
-
-        /// <summary>Falling through air</summary>
-        public const string Fall = "Fall";
-
-        /// <summary>Landing on ground</summary>
-        public const string Land = "Land";
-
-        // ===========================================
-        // CROUCHING - OPTIONAL
-        // ===========================================
-
-        /// <summary>Crouching idle</summary>
-        public const string CrouchIdle = "CrouchIdle";
-
-        /// <summary>Crouching walk</summary>
-        public const string CrouchWalk = "CrouchWalk";
-
-        // ===========================================
-        // COMBAT - REQUIRED
-        // ===========================================
-
-        /// <summary>Generic attack</summary>
-        public const string Attack = "Attack";
-
-        /// <summary>Punch attack</summary>
-        public const string Punch = "Punch";
-
-        /// <summary>Kick attack</summary>
-        public const string Kick = "Kick";
-
-        /// <summary>Taking damage</summary>
-        public const string Hit = "Hit";
-
-        /// <summary>Death animation</summary>
-        public const string Die = "Die";
-
-        /// <summary>Getting back up</summary>
-        public const string GetUp = "GetUp";
-
-        // ===========================================
-        // WEAPONS - REQUIRED
-        // ===========================================
-
-        /// <summary>Holding pistol idle</summary>
-        public const string PistolIdle = "PistolIdle";
-
-        /// <summary>Firing pistol</summary>
-        public const string PistolFire = "PistolFire";
-
-        /// <summary>Holding shotgun idle</summary>
-        public const string ShotgunIdle = "ShotgunIdle";
-
-        /// <summary>Firing shotgun</summary>
-        public const string ShotgunFire = "ShotgunFire";
-
-        /// <summary>Holding flamethrower</summary>
-        public const string FlamethrowerIdle = "FlamethrowerIdle";
-
-        /// <summary>Using flamethrower</summary>
-        public const string FlamethrowerFire = "FlamethrowerFire";
-
-        // ===========================================
-        // INTERACTION - REQUIRED
-        // ===========================================
-
-        /// <summary>Generic interact (press E)</summary>
-        public const string Interact = "Interact";
-
-        /// <summary>Picking up item</summary>
-        public const string PickUp = "PickUp";
-
-        /// <summary>Using item</summary>
-        public const string UseItem = "UseItem";
-
-        /// <summary>Throwing (net for pets)</summary>
-        public const string Throw = "Throw";
-
-        /// <summary>Eating/drinking</summary>
-        public const string Consume = "Consume";
-
-        /// <summary>Smoking cigar</summary>
-        public const string Smoke = "Smoke";
-
-        // ===========================================
-        // WORK/GAS STATION - REQUIRED
-        // ===========================================
-
-        /// <summary>Operating cash register</summary>
-        public const string CashRegister = "CashRegister";
-
-        /// <summary>Pumping gas</summary>
-        public const string PumpGas = "PumpGas";
-
-        /// <summary>Carrying item</summary>
-        public const string Carry = "Carry";
-
-        /// <summary>Handing item to NPC</summary>
-        public const string GiveItem = "GiveItem";
-
-        // ===========================================
-        // EMOTES - OPTIONAL
-        // ===========================================
-
-        /// <summary>Wave hello</summary>
-        public const string Wave = "Wave";
-
-        /// <summary>Dance</summary>
-        public const string Dance = "Dance";
-
-        /// <summary>Thumbs up</summary>
-        public const string ThumbsUp = "ThumbsUp";
-
-        /// <summary>Shrug</summary>
-        public const string Shrug = "Shrug";
-
-        /// <summary>Celebrate</summary>
-        public const string Celebrate = "Celebrate";
-
-        // ===========================================
-        // SPECIAL - REQUIRED
-        // ===========================================
-
-        /// <summary>Spawning from tube</summary>
-        public const string SpawnFromTube = "SpawnFromTube";
-
-        /// <summary>Respawning after death</summary>
-        public const string Respawn = "Respawn";
-
-        /// <summary>Victory pose</summary>
-        public const string Victory = "Victory";
-
-        // ===========================================
-        // SWIMMING - OPTIONAL
-        // ===========================================
-
-        /// <summary>Swimming idle</summary>
-        public const string SwimIdle = "SwimIdle";
-
-        /// <summary>Swimming forward</summary>
-        public const string Swim = "Swim";
-
-        /// <summary>Drowning</summary>
-        public const string Drown = "Drown";
-
-        // ===========================================
-        // SITTING - OPTIONAL
-        // ===========================================
-
-        /// <summary>Sit down</summary>
-        public const string SitDown = "SitDown";
-
-        /// <summary>Sitting idle</summary>
-        public const string SitIdle = "SitIdle";
-
-        /// <summary>Stand up from sitting</summary>
-        public const string StandUp = "StandUp";
-
-        // ===========================================
-        // HELPER METHODS
-        // ===========================================
-
-        /// <summary>
-        /// Get all required animation names (models MUST have these)
-        /// </summary>
-        public static string[] GetRequiredAnimations()
+        private void OnEnable()
         {
-            return new string[]
-            {
-                // Movement
-                Idle, Walk, Run, Sprint,
-                // Jumping
-                Jump, Fall, Land,
-                // Combat
-                Attack, Hit, Die,
-                // Weapons
-                PistolIdle, PistolFire,
-                ShotgunIdle, ShotgunFire,
-                FlamethrowerIdle, FlamethrowerFire,
-                // Interaction
-                Interact, PickUp, Throw, Consume,
-                // Work
-                CashRegister, PumpGas, Carry,
-                // Special
-                SpawnFromTube, Respawn
-            };
+            Instance = this;
+            BuildLookupTable();
         }
 
-        /// <summary>
-        /// Get all optional animation names (nice to have)
-        /// </summary>
-        public static string[] GetOptionalAnimations()
+        private void BuildLookupTable()
         {
-            return new string[]
-            {
-                WalkBack, StrafeLeft, StrafeRight,
-                CrouchIdle, CrouchWalk,
-                Punch, Kick, GetUp,
-                UseItem, Smoke, GiveItem,
-                Wave, Dance, ThumbsUp, Shrug, Celebrate,
-                Victory,
-                SwimIdle, Swim, Drown,
-                SitDown, SitIdle, StandUp
-            };
+            lookupTable = new Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase);
+
+            // Map standard names to YOUR names
+            // If your name is empty, it falls back
+
+            // Movement - always required
+            AddMapping("Idle", idle);
+            AddMapping("Walk", walk);
+            AddMapping("Run", run);
+            AddMapping("Sprint", run); // Sprint = Run
+
+            // Jumping - optional
+            AddMapping("Jump", jump, idle);
+            AddMapping("Fall", fall, idle);
+            AddMapping("Land", idle); // Always idle
+
+            // Combat - optional, falls back to idle or attack
+            AddMapping("Attack", attack, idle);
+            AddMapping("Punch", attack, idle);
+            AddMapping("Kick", attack, idle);
+            AddMapping("Hit", idle); // Hit = just idle (goofy)
+            AddMapping("Die", die, idle);
+            AddMapping("Death", die, idle);
+
+            // Interaction - optional
+            AddMapping("Interact", interact, idle);
+            AddMapping("PickUp", interact, idle);
+            AddMapping("Use", interact, idle);
+
+            // Items
+            AddMapping("Throw", throwNet, attack, idle);
+            AddMapping("Consume", consume, idle);
+            AddMapping("Eat", consume, idle);
+            AddMapping("Drink", consume, idle);
+            AddMapping("Smoke", consume, idle);
+
+            // GOOFY GUN HANDLING - No gun anims needed!
+            // Just use Walk (Frankenstein arms out) and Attack for shooting
+            AddMapping("PistolIdle", walk);
+            AddMapping("PistolFire", attack, idle);
+            AddMapping("PistolReload", idle);
+            AddMapping("ShotgunIdle", walk);
+            AddMapping("ShotgunFire", attack, idle);
+            AddMapping("ShotgunReload", idle);
+            AddMapping("FlamethrowerIdle", walk);
+            AddMapping("FlamethrowerFire", walk); // Keep walking while flaming!
+
+            // Work - use interact or walk
+            AddMapping("CashRegister", interact, idle);
+            AddMapping("PumpGas", interact, idle);
+            AddMapping("Carry", walk);
+            AddMapping("GiveItem", interact, idle);
+
+            // Special
+            AddMapping("SpawnFromTube", spawnFromTube, idle);
+            AddMapping("Spawn", spawnFromTube, idle);
+            AddMapping("Respawn", spawnFromTube, idle);
+            AddMapping("Victory", victory, idle);
+            AddMapping("Celebrate", victory, idle);
+
+            // Emotes
+            AddMapping("Wave", wave, idle);
+            AddMapping("Dance", dance, idle);
+            AddMapping("ThumbsUp", wave, idle);
+
+            // Water - just use movement
+            AddMapping("SwimIdle", idle);
+            AddMapping("Swim", walk);
+            AddMapping("Drown", die, idle);
         }
 
-        /// <summary>
-        /// Check if an animator has all required animations
-        /// </summary>
-        public static bool ValidateAnimator(Animator animator)
+        private void AddMapping(string standardName, string yourName, params string[] fallbacks)
         {
-            if (animator == null) return false;
-
-            var requiredAnims = GetRequiredAnimations();
-            foreach (string animName in requiredAnims)
+            // Use your name if set
+            if (!string.IsNullOrEmpty(yourName))
             {
-                // Check if animation exists in any layer
-                bool found = false;
-                for (int layer = 0; layer < animator.layerCount; layer++)
-                {
-                    if (animator.HasState(layer, Animator.StringToHash(animName)))
-                    {
-                        found = true;
-                        break;
-                    }
-                }
+                lookupTable[standardName] = yourName;
+                return;
+            }
 
-                if (!found)
+            // Try fallbacks in order
+            foreach (string fb in fallbacks)
+            {
+                if (!string.IsNullOrEmpty(fb))
                 {
-                    Debug.LogWarning($"[AnimationValidation] Missing required animation: {animName}");
-                    return false;
+                    lookupTable[standardName] = fb;
+                    return;
                 }
             }
 
-            return true;
+            // Ultimate fallback
+            lookupTable[standardName] = fallbackAnimation;
         }
 
         /// <summary>
-        /// Check if SimpleAnimationPlayer has all required animations
+        /// Get YOUR animation name for a standard action.
+        /// Example: GetAnimation("PistolFire") might return "Attack" or "Idle"
         /// </summary>
-        public static bool ValidateSimpleAnimator(SimpleAnimationPlayer animator)
+        public string Get(string standardName)
         {
-            if (animator == null) return false;
+            if (lookupTable == null) BuildLookupTable();
 
-            var requiredAnims = GetRequiredAnimations();
-            foreach (string animName in requiredAnims)
+            if (lookupTable.TryGetValue(standardName, out string yourAnim))
             {
-                if (!animator.HasAnimation(animName))
-                {
-                    Debug.LogWarning($"[AnimationValidation] Missing required animation: {animName}");
-                    return false;
-                }
+                return yourAnim;
             }
 
-            return true;
+            if (debugMode)
+            {
+                Debug.Log($"[AnimConfig] Unknown animation '{standardName}', using fallback");
+            }
+
+            return fallbackAnimation;
+        }
+
+        /// <summary>
+        /// Quick access - same as Get()
+        /// </summary>
+        public string this[string standardName] => Get(standardName);
+
+        /// <summary>
+        /// Check if you've configured a specific animation
+        /// </summary>
+        public bool Has(string standardName)
+        {
+            if (lookupTable == null) BuildLookupTable();
+            return lookupTable.ContainsKey(standardName);
+        }
+
+        /// <summary>
+        /// Rebuild lookup table (call if you change values at runtime)
+        /// </summary>
+        public void Refresh()
+        {
+            BuildLookupTable();
         }
     }
 
     /// <summary>
-    /// Extension methods for easy animation playback using standardized names
+    /// Static helper for quick animation access anywhere in code.
+    /// Uses the AnimationConfig singleton.
+    ///
+    /// Usage:
+    ///   string anim = Anim.Get("Attack");
+    ///   animator.Play(Anim.Walk);
     /// </summary>
-    public static class PlayerAnimationExtensions
+    public static class Anim
     {
-        public static void PlayIdle(this SimpleAnimationPlayer anim) => anim?.Play(PlayerAnimationNames.Idle);
-        public static void PlayWalk(this SimpleAnimationPlayer anim) => anim?.Play(PlayerAnimationNames.Walk);
-        public static void PlayRun(this SimpleAnimationPlayer anim) => anim?.Play(PlayerAnimationNames.Run);
-        public static void PlaySprint(this SimpleAnimationPlayer anim) => anim?.Play(PlayerAnimationNames.Sprint);
-        public static void PlayJump(this SimpleAnimationPlayer anim) => anim?.Play(PlayerAnimationNames.Jump);
-        public static void PlayFall(this SimpleAnimationPlayer anim) => anim?.Play(PlayerAnimationNames.Fall);
-        public static void PlayLand(this SimpleAnimationPlayer anim) => anim?.Play(PlayerAnimationNames.Land);
-        public static void PlayAttack(this SimpleAnimationPlayer anim) => anim?.Play(PlayerAnimationNames.Attack);
-        public static void PlayHit(this SimpleAnimationPlayer anim) => anim?.Play(PlayerAnimationNames.Hit);
-        public static void PlayDie(this SimpleAnimationPlayer anim) => anim?.Play(PlayerAnimationNames.Die);
-        public static void PlayInteract(this SimpleAnimationPlayer anim) => anim?.Play(PlayerAnimationNames.Interact);
-        public static void PlayThrow(this SimpleAnimationPlayer anim) => anim?.Play(PlayerAnimationNames.Throw);
-        public static void PlayConsume(this SimpleAnimationPlayer anim) => anim?.Play(PlayerAnimationNames.Consume);
-        public static void PlaySpawnFromTube(this SimpleAnimationPlayer anim) => anim?.Play(PlayerAnimationNames.SpawnFromTube);
-        public static void PlayRespawn(this SimpleAnimationPlayer anim) => anim?.Play(PlayerAnimationNames.Respawn);
-        public static void PlayVictory(this SimpleAnimationPlayer anim) => anim?.Play(PlayerAnimationNames.Victory);
+        private static AnimationConfig Config => AnimationConfig.Instance;
+
+        /// <summary>
+        /// Get your animation name for a standard action
+        /// </summary>
+        public static string Get(string standardName)
+        {
+            if (Config != null)
+            {
+                return Config.Get(standardName);
+            }
+
+            // No config - just return the standard name
+            return standardName;
+        }
+
+        // Quick accessors for common animations
+        public static string Idle => Get("Idle");
+        public static string Walk => Get("Walk");
+        public static string Run => Get("Run");
+        public static string Jump => Get("Jump");
+        public static string Fall => Get("Fall");
+        public static string Attack => Get("Attack");
+        public static string Die => Get("Die");
+        public static string Interact => Get("Interact");
+        public static string Throw => Get("Throw");
+        public static string Victory => Get("Victory");
+        public static string Wave => Get("Wave");
+        public static string Dance => Get("Dance");
+
+        // Gun animations (map to walk/attack)
+        public static string PistolIdle => Get("PistolIdle");
+        public static string PistolFire => Get("PistolFire");
+        public static string ShotgunIdle => Get("ShotgunIdle");
+        public static string ShotgunFire => Get("ShotgunFire");
+        public static string FlamethrowerIdle => Get("FlamethrowerIdle");
+        public static string FlamethrowerFire => Get("FlamethrowerFire");
     }
 }
