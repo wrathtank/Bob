@@ -37,15 +37,18 @@ namespace BobsPetroleum.Editor
             EditorGUILayout.Space(10);
 
             // Sections
-            DrawSection("MANAGERS", DrawManagersChecklist);
+            DrawSection("CORE SYSTEMS", DrawCoreSystemsChecklist);
             DrawSection("PLAYER", DrawPlayerChecklist);
             DrawSection("BOB (The Dying Owner)", DrawBobChecklist);
+            DrawSection("CLONE SPAWN (Tubes)", DrawCloneSpawnChecklist);
             DrawSection("SHOP & ECONOMY", DrawEconomyChecklist);
-            DrawSection("COMBAT & PETS", DrawCombatChecklist);
+            DrawSection("COMBAT & WEAPONS", DrawCombatChecklist);
+            DrawSection("PETS & BATTLES", DrawPetsChecklist);
+            DrawSection("ITEMS & CRAFTING", DrawItemsChecklist);
+            DrawSection("WORLD SYSTEMS", DrawWorldChecklist);
             DrawSection("UI", DrawUIChecklist);
-            DrawSection("WORLD", DrawWorldChecklist);
             DrawSection("AUDIO", DrawAudioChecklist);
-            DrawSection("MULTIPLAYER", DrawMultiplayerChecklist);
+            DrawSection("NETWORKING & SAVES", DrawNetworkingChecklist);
 
             EditorGUILayout.Space(20);
 
@@ -122,10 +125,13 @@ namespace BobsPetroleum.Editor
 
         #region Checklists
 
-        private void DrawManagersChecklist()
+        private void DrawCoreSystemsChecklist()
         {
             DrawCheckItem("GameManager", FindObjectOfType<Core.GameManager>() != null,
                 "Controls game state, days, win/lose", () => CreateManager<Core.GameManager>("GameManager"));
+
+            DrawCheckItem("GameFlowController", FindObjectOfType<Core.GameFlowController>() != null,
+                "THE GLUE - connects all systems", () => CreateManager<Core.GameFlowController>("GameFlowController"));
 
             DrawCheckItem("GameBootstrapper", FindObjectOfType<Core.GameBootstrapper>() != null,
                 "Auto-creates managers on Play", () => CreateManager<Core.GameBootstrapper>("GameBootstrapper"));
@@ -139,11 +145,34 @@ namespace BobsPetroleum.Editor
             DrawCheckItem("HorrorEventsSystem", FindObjectOfType<Systems.HorrorEventsSystem>() != null,
                 "Scary events at night", () => CreateManager<Systems.HorrorEventsSystem>("HorrorEventsSystem"));
 
-            DrawCheckItem("QuestSystem", FindObjectOfType<Systems.QuestSystem>() != null,
-                "Daily tasks and objectives", () => CreateManager<Systems.QuestSystem>("QuestSystem"));
-
             DrawCheckItem("DialogueSystem", FindObjectOfType<Systems.DialogueSystem>() != null,
-                "NPC conversations", () => CreateManager<Systems.DialogueSystem>("DialogueSystem"));
+                "NPC conversations with auto camera", () => CreateManager<Systems.DialogueSystem>("DialogueSystem"));
+
+            DrawCheckItem("FastTravelSystem", FindObjectOfType<Systems.FastTravelSystem>() != null,
+                "Subway stations", () => CreateManager<Systems.FastTravelSystem>("FastTravelSystem"));
+        }
+
+        private void DrawCloneSpawnChecklist()
+        {
+            var spawnSystem = FindObjectOfType<Core.CloneSpawnSystem>();
+
+            DrawCheckItem("CloneSpawnSystem", spawnSystem != null,
+                "Spawns players from tubes", () => CreateManager<Core.CloneSpawnSystem>("CloneSpawnSystem"));
+
+            if (spawnSystem != null)
+            {
+                DrawCheckItem("  Spawn Tubes", spawnSystem.spawnTubes != null && spawnSystem.spawnTubes.Length >= 4,
+                    "4 tubes for 4 players");
+
+                DrawCheckItem("  Player Prefab", spawnSystem.playerPrefab != null,
+                    "Prefab to spawn for players");
+
+                DrawCheckItem("  Bob Reference", spawnSystem.injuredBob != null,
+                    "Reference to injured Bob");
+
+                DrawCheckItem("  Intro Dialogue", spawnSystem.introDialogue != null && spawnSystem.introDialogue.Length > 0,
+                    "Bob's intro speech");
+            }
         }
 
         private void DrawPlayerChecklist()
@@ -158,8 +187,8 @@ namespace BobsPetroleum.Editor
                 DrawCheckItem("  CharacterController", player.GetComponent<CharacterController>() != null,
                     "Required for movement");
 
-                DrawCheckItem("  PlayerHealth", player.GetComponent<Player.PlayerHealth>() != null,
-                    "Health and damage", () => player.gameObject.AddComponent<Player.PlayerHealth>());
+                DrawCheckItem("  DeathRespawnSystem", player.GetComponent<Player.DeathRespawnSystem>() != null,
+                    "Death and respawn with home spots", () => player.gameObject.AddComponent<Player.DeathRespawnSystem>());
 
                 DrawCheckItem("  PlayerInventory", player.GetComponent<Player.PlayerInventory>() != null,
                     "Money and items", () => player.gameObject.AddComponent<Player.PlayerInventory>());
@@ -175,7 +204,25 @@ namespace BobsPetroleum.Editor
 
                 DrawCheckItem("  PetCaptureSystem", FindObjectOfType<Battle.PetCaptureSystem>() != null,
                     "Net throwing for pets", () => player.gameObject.AddComponent<Battle.PetCaptureSystem>());
+
+                // Multiplayer components
+                EditorGUILayout.Space(5);
+                EditorGUILayout.LabelField("Multiplayer (optional):", EditorStyles.miniLabel);
+
+#if UNITY_NETCODE
+                DrawCheckItem("  NetworkObject", player.GetComponent<Unity.Netcode.NetworkObject>() != null,
+                    "Required for multiplayer");
+                DrawCheckItem("  NetworkedPlayer", player.GetComponent<Networking.NetworkedPlayer>() != null,
+                    "Syncs player across network");
+#else
+                EditorGUILayout.HelpBox("Install 'Netcode for GameObjects' for multiplayer components", MessageType.Info);
+#endif
             }
+
+            // Home spots
+            var homeSpots = FindObjectsOfType<Player.HomeSpot>();
+            DrawCheckItem("Home Spots", homeSpots.Length > 0,
+                $"Places to set respawn ({homeSpots.Length} found)");
         }
 
         private void DrawBobChecklist()
@@ -244,8 +291,25 @@ namespace BobsPetroleum.Editor
         private void DrawCombatChecklist()
         {
             DrawCheckItem("SimpleGunSystem", FindObjectOfType<Combat.SimpleGunSystem>() != null,
-                "Weapon system");
+                "Weapon system (pistol, shotgun, flamethrower)");
 
+            var gunSystem = FindObjectOfType<Combat.SimpleGunSystem>();
+            if (gunSystem != null)
+            {
+                DrawCheckItem("  WeaponVisuals", FindObjectOfType<Combat.WeaponVisuals>() != null,
+                    "FPS reload animations, flamethrower particles");
+            }
+
+            EditorGUILayout.HelpBox(
+                "Weapons supported:\n" +
+                "- Pistol: Simple reload (move off screen)\n" +
+                "- Shotgun: Simple reload\n" +
+                "- Flamethrower: Particle effects, no reload",
+                MessageType.Info);
+        }
+
+        private void DrawPetsChecklist()
+        {
             DrawCheckItem("PetCaptureSystem", FindObjectOfType<Battle.PetCaptureSystem>() != null,
                 "Net capture system");
 
@@ -257,10 +321,49 @@ namespace BobsPetroleum.Editor
             }
 
             DrawCheckItem("BattleCameraSystem", FindObjectOfType<Battle.BattleCameraSystem>() != null,
-                "Pet battle camera", () => CreateManager<Battle.BattleCameraSystem>("BattleCameraSystem"));
+                "Pokemon-style battle camera", () => CreateManager<Battle.BattleCameraSystem>("BattleCameraSystem"));
 
             DrawCheckItem("BattleSystem", FindObjectOfType<Battle.BattleSystem>() != null,
                 "Pet battle logic");
+
+            // Check for pet animation controllers
+            var petAnimControllers = FindObjectsOfType<Battle.PetAnimationController>();
+            DrawCheckItem("Pet Prefabs", petAnimControllers.Length > 0,
+                $"Pets with PetAnimationController ({petAnimControllers.Length} found)");
+
+            EditorGUILayout.HelpBox(
+                "Pet types: Rats, Dogs, Cats + Demonic versions\n" +
+                "Each needs PetAnimationController for animations:\n" +
+                "- Movement: Idle, Walk, Run\n" +
+                "- Combat: Attack, Bite, Claw, Pounce\n" +
+                "- Demonic: Fire Breath, Dark Pulse",
+                MessageType.Info);
+        }
+
+        private void DrawItemsChecklist()
+        {
+            DrawCheckItem("ConsumableSystem", FindObjectOfType<Items.ConsumableSystem>() != null,
+                "Inventory with thumbnails", () => CreateManager<Items.ConsumableSystem>("ConsumableSystem"));
+
+            DrawCheckItem("CigarCraftingSystem", FindObjectOfType<Items.CigarCraftingSystem>() != null,
+                "Lab table crafting", () => CreateManager<Items.CigarCraftingSystem>("CigarCraftingSystem"));
+
+            var cigar = FindObjectOfType<Items.CigarCraftingSystem>();
+            if (cigar != null)
+            {
+                DrawCheckItem("  Lab Table Price", cigar.labTablePrice > 0,
+                    "Cost to buy lab table");
+                DrawCheckItem("  Recipes", cigar.recipes != null && cigar.recipes.Count > 0,
+                    "Cigar recipes with effects");
+            }
+
+            EditorGUILayout.HelpBox(
+                "Consumables need:\n" +
+                "- ConsumableData ScriptableObject\n" +
+                "- Icon (thumbnail for inventory)\n" +
+                "- Effects (heal, speed, etc.)\n\n" +
+                "Cigars give temporary powers!",
+                MessageType.Info);
         }
 
         private void DrawUIChecklist()
@@ -297,9 +400,35 @@ namespace BobsPetroleum.Editor
                 GameObject.FindGameObjectWithTag("Ground") != null,
                 "Walkable surface");
 
-            DrawCheckItem("PlayerSpawn Point", GameObject.FindGameObjectWithTag("PlayerSpawn") != null ||
-                GameObject.Find("PlayerSpawn") != null,
-                "Player start location");
+            // Water system
+            DrawCheckItem("WaterSystem", FindObjectOfType<Environment.WaterSystem>() != null,
+                "Wavy water planes");
+
+            var water = FindObjectOfType<Environment.WaterSystem>();
+            if (water != null)
+            {
+                DrawCheckItem("  Water Shader", Shader.Find("BobsPetroleum/Water") != null,
+                    "Custom water shader");
+            }
+
+            // Fast travel
+            DrawCheckItem("FastTravelSystem", FindObjectOfType<Systems.FastTravelSystem>() != null,
+                "Subway station travel");
+
+            var fastTravel = FindObjectOfType<Systems.FastTravelSystem>();
+            if (fastTravel != null)
+            {
+                DrawCheckItem("  Subway Stations", fastTravel.stations != null && fastTravel.stations.Count > 0,
+                    $"Travel destinations ({fastTravel.stations?.Count ?? 0})");
+                DrawCheckItem("  Unlock Item", !string.IsNullOrEmpty(fastTravel.unlockItemId),
+                    "Pipe item to unlock travel");
+            }
+
+            EditorGUILayout.HelpBox(
+                "World is a single open scene.\n" +
+                "Add WaterSystem to any plane for wavy water.\n" +
+                "Place SubwayStation prefabs for fast travel.",
+                MessageType.Info);
         }
 
         private void DrawAudioChecklist()
@@ -321,19 +450,56 @@ namespace BobsPetroleum.Editor
                 MessageType.Info);
         }
 
-        private void DrawMultiplayerChecklist()
+        private void DrawNetworkingChecklist()
         {
-            DrawCheckItem("LobbySystem", FindObjectOfType<Multiplayer.LobbySystem>() != null,
-                "Multiplayer lobby", () => CreateManager<Multiplayer.LobbySystem>("LobbySystem"));
+            EditorGUILayout.LabelField("Client-Hosted Multiplayer (1-4 players):", EditorStyles.boldLabel);
 
-            DrawCheckItem("PlayerSpawnPoints", FindObjectsOfType<Multiplayer.PlayerSpawnPoint>().Length >= 2,
-                "At least 2 spawn points");
+            DrawCheckItem("NetworkGameManager", FindObjectOfType<Networking.NetworkGameManager>() != null,
+                "Easy host/join system", () => CreateManager<Networking.NetworkGameManager>("NetworkGameManager"));
+
+            var netMgr = FindObjectOfType<Networking.NetworkGameManager>();
+            if (netMgr != null)
+            {
+                DrawCheckItem("  Player Prefab", netMgr.playerPrefab != null,
+                    "Player prefab with NetworkObject");
+                DrawCheckItem("  Spawn Points", netMgr.spawnPoints != null && netMgr.spawnPoints.Length >= 4,
+                    "4 spawn points for 4 players");
+            }
+
+#if UNITY_NETCODE
+            DrawCheckItem("NetworkManager (Unity)", FindObjectOfType<Unity.Netcode.NetworkManager>() != null,
+                "Unity Netcode NetworkManager");
+#else
+            EditorGUILayout.HelpBox(
+                "Netcode for GameObjects NOT INSTALLED!\n\n" +
+                "To enable multiplayer:\n" +
+                "1. Window > Package Manager\n" +
+                "2. Search 'Netcode for GameObjects'\n" +
+                "3. Click Install",
+                MessageType.Warning);
+#endif
+
+            EditorGUILayout.Space(10);
+            EditorGUILayout.LabelField("Cloud Saves (Supabase):", EditorStyles.boldLabel);
+
+            DrawCheckItem("SupabaseSaveSystem", FindObjectOfType<Networking.SupabaseSaveSystem>() != null,
+                "Cloud database saves", () => CreateManager<Networking.SupabaseSaveSystem>("SupabaseSaveSystem"));
+
+            var saveSystem = FindObjectOfType<Networking.SupabaseSaveSystem>();
+            if (saveSystem != null)
+            {
+                DrawCheckItem("  Supabase URL", !string.IsNullOrEmpty(saveSystem.supabaseUrl),
+                    "Project URL from supabase.com");
+                DrawCheckItem("  Supabase Key", !string.IsNullOrEmpty(saveSystem.supabaseKey),
+                    "Anon/public API key");
+            }
 
             EditorGUILayout.HelpBox(
-                "For full multiplayer, you'll need:\n" +
-                "- Unity Netcode for GameObjects package\n" +
-                "- NetworkManager component\n" +
-                "- Player prefab with NetworkObject",
+                "Game Modes:\n" +
+                "- Forever Mode: Persistent cloud saves\n" +
+                "- 7 Night Runs: Leaderboard scoring\n\n" +
+                "Get free Supabase project at: supabase.com\n" +
+                "See SupabaseSaveSystem.cs for table SQL",
                 MessageType.Info);
         }
 
