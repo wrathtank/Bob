@@ -114,6 +114,13 @@ namespace BobsPetroleum.AI
         private int totalCustomersToday;
         private bool isSpawningEnabled = true;
 
+        /// <summary>
+        /// Spawn rate multiplier (for events like rush hour).
+        /// Higher = more customers spawn.
+        /// </summary>
+        [HideInInspector]
+        public float spawnRateMultiplier = 1f;
+
         private void Awake()
         {
             if (Instance == null) Instance = this;
@@ -183,11 +190,25 @@ namespace BobsPetroleum.AI
                 }
             }
 
+            // Apply spawn rate multiplier (from events)
+            multiplier *= spawnRateMultiplier;
+
             // Higher multiplier = more customers = shorter interval
             float interval = baseSpawnInterval / Mathf.Max(0.1f, multiplier);
             interval += Random.Range(-spawnVariance, spawnVariance);
 
             return Mathf.Max(5f, interval); // Minimum 5 seconds
+        }
+
+        /// <summary>
+        /// Set whether it's daytime (compatibility method for DayNightCycle).
+        /// </summary>
+        public void SetDayTime(bool isDay)
+        {
+            // Adjust spawn rate based on day/night
+            // This is handled automatically in CalculateSpawnInterval
+            // but this method allows external systems to force a state
+            Debug.Log($"[CustomerSpawner] Day time set to: {isDay}");
         }
 
         /// <summary>

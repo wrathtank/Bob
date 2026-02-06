@@ -12,6 +12,11 @@ namespace BobsPetroleum.Player
     /// </summary>
     public class PlayerController : NetworkBehaviour
     {
+        /// <summary>
+        /// Singleton instance for easy access (local player only).
+        /// </summary>
+        public static PlayerController Instance { get; private set; }
+
         [Header("Movement Settings")]
         [Tooltip("Walking speed")]
         public float walkSpeed = 5f;
@@ -215,6 +220,12 @@ namespace BobsPetroleum.Player
 
         private void Awake()
         {
+            // Set instance (local player only, handled properly in OnNetworkSpawn for multiplayer)
+            if (Instance == null)
+            {
+                Instance = this;
+            }
+
             characterController = GetComponent<CharacterController>();
             audioSource = GetComponent<AudioSource>();
 

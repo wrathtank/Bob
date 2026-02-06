@@ -43,10 +43,10 @@ namespace BobsPetroleum.Economy
 
         [Header("Customer Queue")]
         [Tooltip("Current customer at register")]
-        public NPC.CustomerAI currentCustomer;
+        public AI.CustomerAI currentCustomer;
 
         [Tooltip("Queue of waiting customers")]
-        public List<NPC.CustomerAI> customerQueue = new List<NPC.CustomerAI>();
+        public List<AI.CustomerAI> customerQueue = new List<AI.CustomerAI>();
 
         [Header("Interaction")]
         [Tooltip("Key to interact with register")]
@@ -129,7 +129,7 @@ namespace BobsPetroleum.Economy
         public UnityEvent onItemScanned;
         public UnityEvent<float> onTransactionComplete;
         public UnityEvent onTransactionCancelled;
-        public UnityEvent<NPC.CustomerAI> onCustomerServed;
+        public UnityEvent<AI.CustomerAI> onCustomerServed;
 
         // State
         private bool isDrawerOpen = false;
@@ -353,7 +353,7 @@ namespace BobsPetroleum.Economy
         /// <summary>
         /// Customer joins the queue.
         /// </summary>
-        public void CustomerJoinQueue(NPC.CustomerAI customer)
+        public void CustomerJoinQueue(AI.CustomerAI customer)
         {
             if (customer == null) return;
             if (customerQueue.Contains(customer)) return;
@@ -372,7 +372,7 @@ namespace BobsPetroleum.Economy
         /// <summary>
         /// Customer leaves queue.
         /// </summary>
-        public void CustomerLeaveQueue(NPC.CustomerAI customer)
+        public void CustomerLeaveQueue(AI.CustomerAI customer)
         {
             customerQueue.Remove(customer);
 

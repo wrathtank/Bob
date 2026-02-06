@@ -119,7 +119,7 @@ namespace BobsPetroleum.Utilities
                 col.center = new Vector3(0, 0.9f, 0);
             }
 
-            GetOrAddComponent<NPC.CustomerAI>();
+            GetOrAddComponent<AI.CustomerAI>();
             GetOrAddComponent<Animator>();
             GetOrAddComponent<Animation.SimpleAnimationPlayer>();
 

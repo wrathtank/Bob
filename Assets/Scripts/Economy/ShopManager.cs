@@ -77,7 +77,7 @@ namespace BobsPetroleum.Economy
 
         // Runtime
         private AudioSource audioSource;
-        private List<NPC.CustomerAI> customersInShop = new List<NPC.CustomerAI>();
+        private List<AI.CustomerAI> customersInShop = new List<AI.CustomerAI>();
         private float closingTimer;
 
         private void Awake()
@@ -249,7 +249,7 @@ namespace BobsPetroleum.Economy
         /// <summary>
         /// Register a customer entering the shop.
         /// </summary>
-        public void RegisterCustomerEntered(NPC.CustomerAI customer)
+        public void RegisterCustomerEntered(AI.CustomerAI customer)
         {
             if (!customersInShop.Contains(customer))
             {
@@ -260,7 +260,7 @@ namespace BobsPetroleum.Economy
         /// <summary>
         /// Register a customer leaving the shop.
         /// </summary>
-        public void RegisterCustomerLeft(NPC.CustomerAI customer)
+        public void RegisterCustomerLeft(AI.CustomerAI customer)
         {
             customersInShop.Remove(customer);
         }

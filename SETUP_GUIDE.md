@@ -27,19 +27,38 @@ This guide will walk you through EVERY step to set up Bob's Petroleum in Unity. 
 
 # PART 2: ONE-CLICK SETUP (RECOMMENDED)
 
-## Step 2.1: Open the Setup Wizard
+## Step 2.1: Open the MASTER SETUP Tool
 
 1. In Unity's top menu bar, click **Window**
 2. Hover over **Bob's Petroleum**
-3. Click **Setup Wizard**
-4. A new window opens
+3. Click **MASTER SETUP**
+4. A comprehensive 5-tab window opens
 
-## Step 2.2: Run Quick Setup
+## Step 2.2: Follow the Tabs in Order
 
-1. In the Setup Wizard window, click the big green button: **🚀 QUICK SETUP (Create Everything)**
-2. Click **Yes, Setup Everything** in the popup
-3. Wait 2-3 seconds
-4. Check the Console (Window → Console) - you should see "All managers created!"
+### Tab 1: Asset Checklist
+- Review what assets you need to prepare
+- Check off items as you import them
+- Green checkmarks = ready, Yellow = needs attention
+
+### Tab 2: Scene Setup
+1. Click the big button: **Create Complete Scene**
+2. All managers, player, and UI are created automatically
+3. Check Console for "Complete scene created!"
+
+### Tab 3: Prefab Setup
+1. Drag your character models into the prefab slots
+2. Click "Configure Prefab" for each
+3. NFT models go in the NFT Models array
+
+### Tab 4: Validation
+1. Click "Validate All Systems"
+2. Green = good, Red = needs fixing
+3. Click "Auto-Fix Issues" to resolve problems
+
+### Tab 5: Build Checklist
+- Final checks before building for WebGL
+- Ensures everything is ready for deployment
 
 ## Step 2.3: What Was Created
 
@@ -568,19 +587,35 @@ Add creepy sounds to arrays:
 - **Space**: Jump
 - **Shift**: Sprint
 - **C**: Crouch
-- **G**: Toggle Flashlight
+- **F**: Toggle Flashlight
 - **M**: Toggle Minimap
-- **O**: Toggle Shop (if near)
-- **F**: Throw Net (in net mode)
-- **N**: Toggle Net Mode
+- **O**: Toggle Shop Open/Closed
+- **Tab**: Inventory
+- **1-5**: Quick Slots
 - **ESC**: Pause Menu
 - **E**: Interact
+- **~** (Tilde): Debug Console
 
-## Step 16.3: Validate Scene
+## Step 16.3: Debug Console Commands
 
-1. **Window → Bob's Petroleum → Validate Scene**
-2. Check console for any issues
-3. Auto-fixes apply if enabled
+Press **~** to open debug console. Useful commands:
+- `god` - Toggle invincibility
+- `money 1000` - Add money
+- `hamburger 10` - Add hamburgers
+- `spawn zombie` - Spawn a zombie
+- `spawn customer` - Spawn a customer
+- `time day` - Set to daytime
+- `time night` - Set to nighttime
+- `heal` - Restore full health
+- `fps` - Toggle FPS display
+- `help` - List all commands
+
+## Step 16.4: Validate Scene
+
+1. **Window → Bob's Petroleum → MASTER SETUP** → **Validation** tab
+2. Click "Validate All Systems"
+3. Review any red items
+4. Click "Auto-Fix Issues" to resolve problems automatically
 
 ---
 
@@ -594,7 +629,8 @@ Add creepy sounds to arrays:
 | Flashlight | `Scripts/Player/Flashlight.cs` |
 | Skins | `Scripts/Player/SkinManager.cs` |
 | Zombies | `Scripts/NPC/ZombieAI.cs` |
-| Customers | `Scripts/NPC/CustomerAI.cs` |
+| Customers | `Scripts/AI/CustomerAI.cs` |
+| Customer Spawner | `Scripts/AI/CustomerSpawner.cs` |
 | Day/Night | `Scripts/Systems/DayNightCycle.cs` |
 | Horror | `Scripts/Systems/HorrorEventsSystem.cs` |
 | Quests | `Scripts/Systems/QuestSystem.cs` |

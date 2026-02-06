@@ -3,7 +3,7 @@ using UnityEngine.Events;
 using System.Collections;
 using System.Collections.Generic;
 using BobsPetroleum.Core;
-using BobsPetroleum.NPC;
+using BobsPetroleum.AI;
 using BobsPetroleum.Vehicles;
 
 namespace BobsPetroleum.Systems

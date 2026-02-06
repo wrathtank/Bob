@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.Events;
 using BobsPetroleum.Core;
-using BobsPetroleum.NPC;
+using BobsPetroleum.AI;
 
 namespace BobsPetroleum.Systems
 {

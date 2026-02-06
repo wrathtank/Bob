@@ -468,7 +468,7 @@ TAGS:
             agent.acceleration = 8f;
             agent.stoppingDistance = 1f;
 
-            customer.AddComponent<NPC.CustomerAI>();
+            customer.AddComponent<AI.CustomerAI>();
             customer.AddComponent<Animator>();
             customer.AddComponent<Animation.SimpleAnimationPlayer>();
 
@@ -634,7 +634,7 @@ TAGS:
         {
             if (Selection.activeGameObject != null)
             {
-                Undo.AddComponent<NPC.CustomerAI>(Selection.activeGameObject);
+                Undo.AddComponent<AI.CustomerAI>(Selection.activeGameObject);
                 Debug.Log($"Added CustomerAI to {Selection.activeGameObject.name}");
             }
         }

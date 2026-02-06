@@ -276,7 +276,7 @@ namespace BobsPetroleum.Utilities
                 }
             }
 
-            var customers = FindObjectsOfType<NPC.CustomerAI>();
+            var customers = FindObjectsOfType<AI.CustomerAI>();
             foreach (var customer in customers)
             {
                 var agent = customer.GetComponent<NavMeshAgent>();
